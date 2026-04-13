@@ -23,7 +23,7 @@
         <i class="fas fa-baseball-ball text-4xl"></i>
         <div>
           <h1 class="text-3xl font-bold tracking-tight">MLB 2026 Player Game Logs</h1>
-          <p class="text-blue-200 text-sm">One row per player per game • All stats included</p>
+          <p class="text-blue-200 text-sm">Fantasy • DFS • Props • Updated Daily</p>
         </div>
       </div>
       <div id="last-updated" class="text-sm bg-white/10 px-4 py-2 rounded-full backdrop-blur-md"></div>
@@ -33,9 +33,8 @@
   <div class="max-w-7xl mx-auto px-6 py-8">
     <!-- Tabs -->
     <div class="flex border-b border-gray-700 mb-6 text-lg">
-      <button onclick="switchTab(0)" id="tab-all" class="tab-active px-8 py-4 font-medium flex-1 md:flex-none">All Players</button>
-      <button onclick="switchTab(1)" id="tab-batters" class="px-8 py-4 font-medium flex-1 md:flex-none">Batters View</button>
-      <button onclick="switchTab(2)" id="tab-pitchers" class="px-8 py-4 font-medium flex-1 md:flex-none">Pitchers View</button>
+      <button onclick="switchTab(0)" id="tab-batters" class="tab-active px-10 py-4 font-medium flex-1 md:flex-none">Batters</button>
+      <button onclick="switchTab(1)" id="tab-pitchers" class="px-10 py-4 font-medium flex-1 md:flex-none">Pitchers</button>
     </div>
 
     <!-- Search & Export -->
@@ -52,7 +51,7 @@
 
     <div id="loading" class="text-center py-20 text-gray-400">
       <i class="fas fa-spinner fa-spin text-4xl mb-4"></i>
-      <p class="text-lg">Loading complete 2026 season game logs...</p>
+      <p class="text-lg">Loading 2026 season game logs...</p>
     </div>
 
     <div id="table" class="hidden"></div>
@@ -63,14 +62,12 @@
     const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
     let tableInstance;
     let allData = [];
-    let currentTab = 0; // 0 = All, 1 = Batters View, 2 = Pitchers View
+    let currentTab = 0; // 0 = Batters, 1 = Pitchers
 
     function switchTab(tab) {
       currentTab = tab;
-      document.querySelectorAll('button[id^="tab-"]').forEach(btn => btn.classList.remove('tab-active'));
-      document.getElementById('tab-all').classList.toggle('tab-active', tab === 0);
-      document.getElementById('tab-batters').classList.toggle('tab-active', tab === 1);
-      document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 2);
+      document.getElementById('tab-batters').classList.toggle('tab-active', tab === 0);
+      document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 1);
       buildTable();
     }
 
@@ -87,7 +84,15 @@
     }
 
     function buildTable() {
-      let displayData = allData.map(row => {
+      let displayData = allData;
+
+      if (currentTab === 0) { // Batters
+        displayData = allData.filter(r => r.atBats !== "" && r.atBats != null);
+      } else if (currentTab === 1) { // Pitchers
+        displayData = allData.filter(r => r.inningsPitched !== "" && r.inningsPitched != null);
+      }
+
+      displayData = displayData.map(row => {
         const home = row.home_team_abbreviation || "";
         const away = row.away_team_abbreviation || "";
         const isHomeWin = row.home_isWinner === true;
@@ -99,39 +104,13 @@
           ...row,
           matchup: `${away} @ ${home}`,
           result: `<span class="${resultColor} font-medium">${resultText}</span>`,
-          fpts: calculateFPTS(row)
+          fpts: currentTab === 0 ? calculateFPTS(row) : ""
         };
       });
 
       if (tableInstance) tableInstance.destroy();
 
-      const allColumns = [
-        {title: "Date", field: "gameDate", width: 100},
-        {title: "Player", field: "fullName", width: 190, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 90},
-        {title: "Matchup", field: "matchup", width: 160},
-        {title: "Result", field: "result", width: 110, formatter: "html"},
-        {title: "FPTS", field: "fpts", width: 80, hozAlign: "center"},
-        {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
-        {title: "R", field: "runs", width: 60, hozAlign: "center"},
-        {title: "H", field: "hits", width: 60, hozAlign: "center"},
-        {title: "2B", field: "doubles", width: 60, hozAlign: "center"},
-        {title: "3B", field: "triples", width: 60, hozAlign: "center"},
-        {title: "HR", field: "homeRuns", width: 60, hozAlign: "center"},
-        {title: "RBI", field: "rbi", width: 60, hozAlign: "center"},
-        {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
-        {title: "K", field: "strikeOuts", width: 60, hozAlign: "center"},
-        {title: "SB", field: "stolenBases", width: 60, hozAlign: "center"},
-        {title: "CS", field: "caughtStealing", width: 60, hozAlign: "center"},
-        {title: "GIDP", field: "groundIntoDoublePlay", width: 70, hozAlign: "center"},
-        {title: "PA", field: "plateAppearances", width: 70, hozAlign: "center"},
-        {title: "Summary", field: "gameLogSummary", minWidth: 240, headerFilter: "input"},
-        {title: "IP", field: "inningsPitched", width: 80, hozAlign: "center"},
-        {title: "ER", field: "earnedRuns", width: 70, hozAlign: "center"},
-        {title: "Decision", field: "note", width: 140}
-      ];
-
-      const batterView = [
+      const batterColumns = [
         {title: "Date", field: "gameDate", width: 100},
         {title: "Player", field: "fullName", width: 190, headerFilter: "input"},
         {title: "Team", field: "home_team_abbreviation", width: 90},
@@ -154,7 +133,7 @@
         {title: "Summary", field: "gameLogSummary", minWidth: 240, headerFilter: "input"}
       ];
 
-      const pitcherView = [
+      const pitcherColumns = [
         {title: "Date", field: "gameDate", width: 100},
         {title: "Player", field: "fullName", width: 190, headerFilter: "input"},
         {title: "Team", field: "home_team_abbreviation", width: 90},
@@ -180,7 +159,7 @@
         paginationSizeSelector: [25, 50, 100, 250],
         initialSort: [{column: "gameDate", dir: "desc"}],
         height: "calc(100vh - 300px)",
-        columns: currentTab === 0 ? allColumns : currentTab === 1 ? batterView : pitcherView,
+        columns: currentTab === 0 ? batterColumns : pitcherColumns,
         headerFilterLiveFilterDelay: 200,
         tooltips: true,
       });
@@ -206,8 +185,8 @@
 
     function exportCSV() {
       if (!tableInstance) return;
-      const suffix = currentTab === 0 ? "all" : currentTab === 1 ? "batters" : "pitchers";
-      tableInstance.download("csv", `mlb_2026_${suffix}_logs.csv`);
+      const filename = currentTab === 0 ? "mlb_2026_batters_logs.csv" : "mlb_2026_pitchers_logs.csv";
+      tableInstance.download("csv", filename);
     }
   </script>
 </body>
