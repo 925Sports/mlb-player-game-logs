@@ -92,7 +92,6 @@
         displayData = allData.filter(r => r.inningsPitched !== "" && r.inningsPitched != null);
       }
 
-      // Add calculated fields
       displayData = displayData.map(row => {
         const home = row.home_team_abbreviation || "";
         const away = row.away_team_abbreviation || "";
@@ -114,7 +113,7 @@
       const batterColumns = [
         {title: "Date", field: "gameDate", width: 100},
         {title: "Player", field: "fullName", width: 190, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 85},
+        {title: "Team", field: "home_team_abbreviation", width: 90},
         {title: "Matchup", field: "matchup", width: 160},
         {title: "Result", field: "result", width: 110, formatter: "html"},
         {title: "FPTS", field: "fpts", width: 80, hozAlign: "center"},
@@ -137,7 +136,7 @@
       const pitcherColumns = [
         {title: "Date", field: "gameDate", width: 100},
         {title: "Player", field: "fullName", width: 190, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 85},
+        {title: "Team", field: "home_team_abbreviation", width: 90},
         {title: "Matchup", field: "matchup", width: 160},
         {title: "Result", field: "result", width: 110, formatter: "html"},
         {title: "IP", field: "inningsPitched", width: 80, hozAlign: "center"},
