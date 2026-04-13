@@ -1,1 +1,24 @@
+name: Daily MLB Player Game Logs
 
+on:
+  schedule:
+    - cron: '0 4 * * *'      # Runs every day at 4 AM UTC
+  workflow_dispatch:         # Lets you run it manually
+
+jobs:
+  daily-pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python main.py
+      - name: Commit new CSV files
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add *.csv
+          git commit -m "Daily MLB game logs $(date)" || echo "No changes"
+          git push
