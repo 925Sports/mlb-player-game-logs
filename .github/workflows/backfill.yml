@@ -1,7 +1,7 @@
 name: Backfill MLB Player Game Logs
 
 on:
-  workflow_dispatch:         # Only runs when you manually trigger it
+  workflow_dispatch:
 
 jobs:
   backfill:
@@ -10,7 +10,7 @@ jobs:
       contents: write
 
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # Silences the Node.js warning
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
