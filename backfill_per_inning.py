@@ -15,13 +15,12 @@ def get_play_by_play(game_pk):
     r.raise_for_status()
     return r.json()
 
-def main(start_date="2026-04-12"):   # <-- Changed to test with a known date
-    end_date = date.fromisoformat("2026-04-12")   # Only pull one day for testing
-    current = date.fromisoformat(start_date)
-    print(f"🔄 Testing per-inning pull for {start_date} only (for debugging)")
+def main():
+    # TEMPORARY TEST: Only pull these 2 recent dates so it runs fast
+    test_dates = ["2026-04-12", date.today().strftime("%Y-%m-%d")]
+    print(f"🚀 TEST Backfill — pulling only these dates: {test_dates}")
 
-    while current <= end_date:
-        date_str = current.strftime("%Y-%m-%d")
+    for date_str in test_dates:
         print(f"\n📅 Processing {date_str}")
 
         schedule = get_schedule(date_str)
@@ -86,9 +85,7 @@ def main(start_date="2026-04-12"):   # <-- Changed to test with a known date
         else:
             print(f"   ⚠️ No plays found for {date_str}")
 
-        current += timedelta(days=1)
-
-    print("\n🎉 Test per-inning pull completed!")
+    print("\n🎉 Test backfill completed for the 2 dates!")
 
 if __name__ == "__main__":
     main()
