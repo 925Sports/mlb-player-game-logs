@@ -1,0 +1,38 @@
+name: Backfill MLB Player Game Logs
+
+on:
+  workflow_dispatch:         # Only runs when you manually trigger it
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # Silences the Node.js warning
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Backfill Script
+        run: python backfill.py
+
+      - name: Commit and push all CSV files
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add *.csv || true
+          git commit -m "Backfill MLB player game logs - $(date)" || echo "No changes to commit"
+          git push || true
