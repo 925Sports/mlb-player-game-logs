@@ -72,19 +72,15 @@
     }
 
     function calculateFPTS(row) {
-      if (row.atBats !== "" && row.atBats != null) {
-        // Simple DraftKings-style scoring for hitters
-        return (row.hits || 0) * 1 +
-               (row.doubles || 0) * 2 +
-               (row.triples || 0) * 3 +
-               (row.homeRuns || 0) * 4 +
-               (row.runs || 0) * 1 +
-               (row.rbi || 0) * 1 +
-               (row.baseOnBalls || 0) * 1 +
-               (row.stolenBases || 0) * 1 -
-               (row.strikeOuts || 0) * 0.5;
-      }
-      return "";
+      return (row.hits || 0) * 1 +
+             (row.doubles || 0) * 2 +
+             (row.triples || 0) * 3 +
+             (row.homeRuns || 0) * 4 +
+             (row.runs || 0) * 1 +
+             (row.rbi || 0) * 1 +
+             (row.baseOnBalls || 0) * 1 +
+             (row.stolenBases || 0) * 1 -
+             (row.strikeOuts || 0) * 0.5;
     }
 
     function buildTable() {
@@ -96,13 +92,59 @@
         displayData = allData.filter(r => r.inningsPitched !== "" && r.inningsPitched != null);
       }
 
-      // Add calculated FPTS for batters
-      displayData = displayData.map(row => ({
-        ...row,
-        fpts: currentTab === 0 ? calculateFPTS(row) : ""
-      }));
+      // Add calculated fields
+      displayData = displayData.map(row => {
+        const home = row.home_team_abbreviation || "";
+        const away = row.away_team_abbreviation || "";
+        const isHomeWin = row.home_isWinner === true;
+        const score = `${row.home_score || 0}-${row.away_score || 0}`;
+        const resultText = isHomeWin ? `W ${score}` : `L ${score}`;
+        const resultColor = isHomeWin ? "text-green-400" : "text-red-400";
+
+        return {
+          ...row,
+          matchup: `${away} @ ${home}`,
+          result: `<span class="${resultColor} font-medium">${resultText}</span>`,
+          fpts: currentTab === 0 ? calculateFPTS(row) : ""
+        };
+      });
 
       if (tableInstance) tableInstance.destroy();
+
+      const batterColumns = [
+        {title: "Date", field: "gameDate", width: 100},
+        {title: "Matchup", field: "matchup", width: 160},
+        {title: "Result", field: "result", width: 110, formatter: "html"},
+        {title: "FPTS", field: "fpts", width: 80, hozAlign: "center"},
+        {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
+        {title: "R", field: "runs", width: 60, hozAlign: "center"},
+        {title: "H", field: "hits", width: 60, hozAlign: "center"},
+        {title: "2B", field: "doubles", width: 60, hozAlign: "center"},
+        {title: "3B", field: "triples", width: 60, hozAlign: "center"},
+        {title: "HR", field: "homeRuns", width: 60, hozAlign: "center"},
+        {title: "RBI", field: "rbi", width: 60, hozAlign: "center"},
+        {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
+        {title: "K", field: "strikeOuts", width: 60, hozAlign: "center"},
+        {title: "SB", field: "stolenBases", width: 60, hozAlign: "center"},
+        {title: "CS", field: "caughtStealing", width: 60, hozAlign: "center"},
+        {title: "GIDP", field: "groundIntoDoublePlay", width: 70, hozAlign: "center"},
+        {title: "PA", field: "plateAppearances", width: 70, hozAlign: "center"},
+        {title: "Summary", field: "gameLogSummary", minWidth: 240, headerFilter: "input"}
+      ];
+
+      const pitcherColumns = [
+        {title: "Date", field: "gameDate", width: 100},
+        {title: "Matchup", field: "matchup", width: 160},
+        {title: "Result", field: "result", width: 110, formatter: "html"},
+        {title: "IP", field: "inningsPitched", width: 80, hozAlign: "center"},
+        {title: "ER", field: "earnedRuns", width: 70, hozAlign: "center"},
+        {title: "H", field: "hitsAllowed", width: 70, hozAlign: "center"},
+        {title: "HR", field: "homeRunsAllowed", width: 70, hozAlign: "center"},
+        {title: "K", field: "strikeOutsPitching", width: 70, hozAlign: "center"},
+        {title: "BB", field: "baseOnBallsPitching", width: 70, hozAlign: "center"},
+        {title: "Pitches", field: "pitchesThrown", width: 90, hozAlign: "center"},
+        {title: "Decision", field: "note", width: 160}
+      ];
 
       tableInstance = new Tabulator("#table", {
         data: displayData,
@@ -113,34 +155,7 @@
         paginationSizeSelector: [25, 50, 100, 250],
         initialSort: [{column: "gameDate", dir: "desc"}],
         height: "calc(100vh - 300px)",
-        columns: currentTab === 0 ? [
-          {title: "Date", field: "gameDate", width: 100},
-          {title: "Matchup", field: "matchup", width: 160},
-          {title: "Result", field: "result", width: 110, formatter: "html"},
-          {title: "FPTS", field: "fpts", width: 80, hozAlign: "center"},
-          {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
-          {title: "R", field: "runs", width: 60, hozAlign: "center"},
-          {title: "H", field: "hits", width: 60, hozAlign: "center"},
-          {title: "2B", field: "doubles", width: 60, hozAlign: "center"},
-          {title: "3B", field: "triples", width: 60, hozAlign: "center"},
-          {title: "HR", field: "homeRuns", width: 60, hozAlign: "center"},
-          {title: "RBI", field: "rbi", width: 60, hozAlign: "center"},
-          {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
-          {title: "K", field: "strikeOuts", width: 60, hozAlign: "center"},
-          {title: "SB", field: "stolenBases", width: 60, hozAlign: "center"},
-        ] : [
-          {title: "Date", field: "gameDate", width: 100},
-          {title: "Matchup", field: "matchup", width: 160},
-          {title: "Result", field: "result", width: 110, formatter: "html"},
-          {title: "IP", field: "inningsPitched", width: 80, hozAlign: "center"},
-          {title: "ER", field: "earnedRuns", width: 70, hozAlign: "center"},
-          {title: "H", field: "hitsAllowed", width: 70, hozAlign: "center"},
-          {title: "HR", field: "homeRunsAllowed", width: 70, hozAlign: "center"},
-          {title: "K", field: "strikeOutsPitching", width: 70, hozAlign: "center"},
-          {title: "BB", field: "baseOnBallsPitching", width: 70, hozAlign: "center"},
-          {title: "Pitches", field: "pitchesThrown", width: 90, hozAlign: "center"},
-          {title: "Decision", field: "note", width: 140},
-        ],
+        columns: currentTab === 0 ? batterColumns : pitcherColumns,
         headerFilterLiveFilterDelay: 200,
         tooltips: true,
       });
@@ -151,21 +166,7 @@
       header: true,
       dynamicTyping: true,
       complete: function(results) {
-        allData = results.data.map(row => {
-          const home = row.home_team_abbreviation || "";
-          const away = row.away_team_abbreviation || "";
-          const isHomeWin = row.home_isWinner === true;
-          const score = `${row.home_score || 0}-${row.away_score || 0}`;
-          const resultText = isHomeWin ? `W ${score}` : `L ${score}`;
-          const resultColor = isHomeWin ? "text-green-400" : "text-red-400";
-
-          return {
-            ...row,
-            matchup: `${away} @ ${home}`,
-            result: `<span class="${resultColor} font-medium">${resultText}</span>`
-          };
-        });
-
+        allData = results.data;
         document.getElementById("loading").classList.add("hidden");
         document.getElementById("table").classList.remove("hidden");
 
@@ -180,7 +181,8 @@
 
     function exportCSV() {
       if (!tableInstance) return;
-      tableInstance.download("csv", `mlb_2026_${currentTab === 0 ? 'batters' : 'pitchers'}_logs.csv`);
+      const filename = currentTab === 0 ? "mlb_2026_batters_logs.csv" : "mlb_2026_pitchers_logs.csv";
+      tableInstance.download("csv", filename);
     }
   </script>
 </body>
