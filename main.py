@@ -58,7 +58,8 @@ def extract_player_rows(game, box, date_str):
     for side in ["home", "away"]:
         players_dict = box.get("teams", {}).get(side, {}).get("players", {})
         for pid, player in players_dict.items():
-            if "stats" not in player: continue
+            if "stats" not in player: 
+                continue
             person = player.get("person", {})
             stats = player.get("stats", {})
             batting = stats.get("batting", {})
@@ -113,7 +114,7 @@ def extract_player_rows(game, box, date_str):
 
 def main(date_str=None):
     if not date_str:
-        date_str = date.today().strftime("%Y-%m-%d")
+        date_str = "2026-04-12"   # ← TEMPORARY: Pulling yesterday's data so we get real games
     print(f"🚀 Pulling data for {date_str}")
 
     schedule = get_schedule(date_str)
@@ -142,6 +143,9 @@ def main(date_str=None):
             writer.writeheader()
             writer.writerows(all_rows)
         print(f"✅ Saved {len(all_rows)} rows to {filename}")
+    else:
+        print("No completed games found for this date.")
 
 if __name__ == "__main__":
+    main()
     main()
