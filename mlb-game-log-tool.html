@@ -62,7 +62,7 @@
     const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
     let tableInstance;
     let allData = [];
-    let currentTab = 0; // 0 = Batters, 1 = Pitchers
+    let currentTab = 0;
 
     function switchTab(tab) {
       currentTab = tab;
@@ -86,9 +86,9 @@
     function buildTable() {
       let displayData = allData;
 
-      if (currentTab === 0) { // Batters
+      if (currentTab === 0) {
         displayData = allData.filter(r => r.atBats !== "" && r.atBats != null);
-      } else if (currentTab === 1) { // Pitchers
+      } else if (currentTab === 1) {
         displayData = allData.filter(r => r.inningsPitched !== "" && r.inningsPitched != null);
       }
 
