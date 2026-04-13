@@ -2,7 +2,7 @@ name: Daily MLB Player Game Logs
 
 on:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 4 * * *'      # Runs every day at 4 AM UTC (~11 PM CDT)
   workflow_dispatch:
 
 jobs:
@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
@@ -28,10 +31,13 @@ jobs:
       - name: Run MLB pull script
         run: python main.py
 
-      - name: Commit and push new CSV files (if any)
+      - name: Merge all daily logs into one seasonal file
+        run: python merge_logs.py
+
+      - name: Commit and push new files
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add *.csv || true
-          git commit -m "Daily MLB player game logs update - $(date)" || echo "No changes to commit"
+          git commit -m "Daily MLB update + merged seasonal file - $(date)" || echo "No changes to commit"
           git push || true
