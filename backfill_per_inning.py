@@ -15,10 +15,10 @@ def get_play_by_play(game_pk):
     r.raise_for_status()
     return r.json()
 
-def main(start_date="2026-03-26"):
-    end_date = date.today()
+def main(start_date="2026-04-12"):   # <-- Changed to test with a known date
+    end_date = date.fromisoformat("2026-04-12")   # Only pull one day for testing
     current = date.fromisoformat(start_date)
-    print(f"🔄 Starting per-inning backfill from {start_date} to {end_date}")
+    print(f"🔄 Testing per-inning pull for {start_date} only (for debugging)")
 
     while current <= end_date:
         date_str = current.strftime("%Y-%m-%d")
@@ -83,11 +83,12 @@ def main(start_date="2026-03-26"):
                 writer.writeheader()
                 writer.writerows(all_rows)
             print(f"   ✅ Saved {len(all_rows)} rows to {filename}")
+        else:
+            print(f"   ⚠️ No plays found for {date_str}")
 
         current += timedelta(days=1)
-        time.sleep(2)  # extra pause between days
 
-    print("\n🎉 Per-inning backfill completed!")
+    print("\n🎉 Test per-inning pull completed!")
 
 if __name__ == "__main__":
-    main()   # You can change the start_date here if needed, e.g. main("2026-04-01")
+    main()
