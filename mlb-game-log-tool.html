@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLB Player Game Logs • 2026 Season</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin:0; padding:20px; background:#f8f9fa; }
+    .header { text-align:center; margin-bottom:20px; }
+    .header h1 { margin:0; color:#1e3a8a; }
+    .container { max-width: 1400px; margin: auto; background:white; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.1); overflow:hidden; }
+    #table { height: 85vh; }
+    .loading { text-align:center; padding:40px; font-size:18px; color:#666; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>MLB 2026 Player Game Logs</h1>
+    <p>Live updated • Searchable • Filter by player, team, date</p>
+  </div>
+
+  <div class="container">
+    <div id="loading" class="loading">Loading latest game logs from GitHub...</div>
+    <div id="table"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script>
+    const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
+
+    let table;
+
+    Papa.parse(CSV_URL, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: function(results) {
+        document.getElementById("loading").style.display = "none";
+
+        table = new Tabulator("#table", {
+          data: results.data,
+          layout: "fitColumns",
+          responsiveLayout: "collapse",
+          pagination: "local",
+          paginationSize: 50,
+          paginationSizeSelector: [25, 50, 100, 250],
+          initialSort: [{column: "gameDate", dir: "desc"}],
+          columns: [
+            {title: "Date", field: "gameDate", width: 110, sorter: "date"},
+            {title: "Player", field: "fullName", width: 180, headerFilter: "input"},
+            {title: "Team", field: "home_team_abbreviation", width: 80, headerFilter: "input"},
+            {title: "Opponent", field: "away_team_abbreviation", width: 80, headerFilter: "input"},
+            {title: "Position", field: "primaryPosition_name", width: 100},
+            {title: "AB", field: "atBats", width: 70},
+            {title: "H", field: "hits", width: 70},
+            {title: "HR", field: "homeRuns", width: 70},
+            {title: "RBI", field: "rbi", width: 70},
+            {title: "R", field: "runs", width: 70},
+            {title: "BB", field: "baseOnBalls", width: 70},
+            {title: "SO", field: "strikeOuts", width: 70},
+            {title: "SB", field: "stolenBases", width: 70},
+            {title: "Summary", field: "gameLogSummary", width: 220, headerFilter: "input"},
+            {title: "IP", field: "inningsPitched", width: 80},
+            {title: "ER", field: "earnedRuns", width: 70},
+            {title: "K", field: "strikeOutsPitching", width: 70},
+            {title: "W/L/S", field: "note", width: 110},
+          ],
+          headerFilterLiveFilterDelay: 300,
+          tooltips: true,
+        });
+      },
+      error: function() {
+        document.getElementById("loading").innerHTML = "⚠️ Unable to load data. Please check the CSV file exists.";
+      }
+    });
+  </script>
+</body>
+</html>
