@@ -32,6 +32,8 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add mlb_per_inning_logs_*.csv mlb_2026_per_inning_logs.csv
+          git add mlb_per_inning_logs_*.csv mlb_2026_per_inning_logs.csv || true
           git commit -m "Backfill per-inning logs up to $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git push || true
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
