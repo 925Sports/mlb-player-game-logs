@@ -114,7 +114,7 @@ def extract_player_rows(game, box, date_str):
 
 def main(date_str=None):
     if not date_str:
-        date_str = "2026-04-12"   # ← TEMPORARY: Pulling yesterday's data so we get real games
+        date_str = date.today().strftime("%Y-%m-%d")   # Now uses today's date automatically
     print(f"🚀 Pulling data for {date_str}")
 
     schedule = get_schedule(date_str)
@@ -147,5 +147,4 @@ def main(date_str=None):
         print("No completed games found for this date.")
 
 if __name__ == "__main__":
-    main()
     main()
