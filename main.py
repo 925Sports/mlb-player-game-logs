@@ -1,6 +1,6 @@
 import requests
 import csv
-from datetime import date, timedelta
+from datetime import date
 import time
 
 def get_schedule(date_str):
@@ -54,29 +54,32 @@ def extract_player_rows(game_pk, box_data, game_date):
                 "strikeOutsPitching": pitching.get("strikeOuts"),
                 "baseOnBallsPitching": pitching.get("baseOnBalls"),
                 "pitchesThrown": pitching.get("pitchesThrown"),
-                "note": player.get("note"),   # Decision (W, L, SV, etc.)
+                "note": player.get("note"),
             }
             rows.append(row)
     return rows
 
 def main():
-    # Pull YESTERDAY's games so they are guaranteed Final
-    yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
-    print(f"🚀 Pulling detailed boxscore data for YESTERDAY: {yesterday}")
+    test_date = "2026-04-13"
+    print(f"🚀 DEBUG MODE - Pulling detailed boxscore data for HARD-CODED date: {test_date}")
 
-    schedule = get_schedule(yesterday)
+    schedule = get_schedule(test_date)
     games = schedule.get("dates", [{}])[0].get("games", [])
+
+    print(f"Found {len(games)} games on {test_date}")
 
     all_rows = []
     for game in games:
         game_pk = game["gamePk"]
         status = game.get("status", {}).get("detailedState", "")
+        print(f"  Game {game_pk} status: {status}")
         if status not in ["Final", "Completed Early", "Live"]:
+            print(f"    Skipping - not Final")
             continue
 
         try:
             box = get_boxscore(game_pk)
-            new_rows = extract_player_rows(game_pk, box, yesterday)
+            new_rows = extract_player_rows(game_pk, box, test_date)
             all_rows.extend(new_rows)
             print(f"✅ Added {len(new_rows)} players from game {game_pk}")
             time.sleep(1.5)
@@ -84,14 +87,14 @@ def main():
             print(f"⚠️ Error on game {game_pk}: {e}")
 
     if all_rows:
-        filename = f"mlb_player_game_logs_{yesterday}.csv"
+        filename = f"mlb_player_game_logs_{test_date}.csv"
         with open(filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
             writer.writeheader()
             writer.writerows(all_rows)
-        print(f"✅ Saved {len(all_rows)} rows to {filename}")
+        print(f"✅ SUCCESS - Saved {len(all_rows)} rows to {filename}")
     else:
-        print("No completed games found for yesterday.")
+        print("❌ No rows found for this date.")
 
 if __name__ == "__main__":
     main()
