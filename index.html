@@ -5,14 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MLB 2026 Player Game Logs</title>
   
-  <!-- CSS -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
   
-  <!-- Scripts (loaded in correct order) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Load libraries with defer so they finish before our code runs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com" defer></script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
   <div class="max-w-7xl mx-auto p-6">
@@ -23,7 +22,6 @@
       <div id="status" class="text-sm font-medium"></div>
     </div>
 
-    <!-- Tabs -->
     <div class="flex gap-4 border-b border-zinc-700 mb-6">
       <button onclick="switchTab(0)" id="tab-batters" class="tab-active px-6 py-3 text-lg font-medium">Batters</button>
       <button onclick="switchTab(1)" id="tab-pitchers" class="px-6 py-3 text-lg font-medium">Pitchers</button>
@@ -33,6 +31,7 @@
     <div id="table-container" class="bg-zinc-900 rounded-xl shadow-xl overflow-hidden"></div>
   </div>
 
+  <!-- Custom script at the VERY END of the body -->
   <script>
     let gameLogData = [];
     let perInningData = [];
@@ -44,27 +43,23 @@
 
     async function loadData() {
       const statusEl = document.getElementById("status");
-      statusEl.innerHTML = `🔄 Loading data...`;
+      statusEl.innerHTML = `🔄 Loading CSVs...`;
 
       try {
-        const [gameRes, perRes] = await Promise.all([
-          fetch(CSV_GAME_LOG),
-          fetch(CSV_PER_INNING)
-        ]);
+        const [gameRes, perRes] = await Promise.all([fetch(CSV_GAME_LOG), fetch(CSV_PER_INNING)]);
 
         gameLogData = Papa.parse(await gameRes.text(), {header: true, dynamicTyping: true}).data;
         perInningData = Papa.parse(await perRes.text(), {header: true, dynamicTyping: true}).data;
 
         document.getElementById("debug-info").innerHTML = `
-          ✅ <strong>Loaded ${gameLogData.length} game log rows</strong><br>
-          ✅ <strong>Loaded ${perInningData.length} per-inning rows</strong><br>
-          Latest date: ${gameLogData[0]?.gameDate || '—'}
+          ✅ Game logs: <span class="text-cyan-400">${gameLogData.length}</span> rows<br>
+          ✅ Per-inning: <span class="text-cyan-400">${perInningData.length}</span> rows
         `;
 
-        statusEl.innerHTML = `✅ <span class="text-emerald-400">Ready • ${gameLogData.length} rows</span>`;
+        statusEl.innerHTML = `✅ Ready`;
         buildTable();
       } catch (err) {
-        statusEl.innerHTML = `❌ Failed to load CSV`;
+        statusEl.innerHTML = `❌ Load failed`;
         console.error(err);
       }
     }
@@ -102,10 +97,7 @@
         {title: "Summary", field: "gameLogSummary", minWidth: 300}
       ];
 
-      const filtered = gameLogData.filter(row => {
-        if (currentTab === 0) return row.atBats != null;
-        return row.inningsPitched != null;
-      });
+      const filtered = gameLogData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
 
       table = new Tabulator("#table-container", {
         data: filtered,
@@ -120,10 +112,7 @@
 
     function togglePerInningDropdown(row) {
       const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains('detail-row')) {
-        existing.remove();
-        return;
-      }
+      if (existing && existing.classList.contains('detail-row')) { existing.remove(); return; }
 
       const gamePk = row.getData().gamePk;
       const playerId = row.getData().playerId;
@@ -145,14 +134,7 @@
             <table class="w-full text-sm">
               <thead><tr class="bg-zinc-900"><th class="p-2 text-left">Inning</th><th class="p-2 text-left">Result</th><th class="p-2 text-left">Description</th><th class="p-2 text-center">Pitches</th></tr></thead>
               <tbody>
-                ${details.map(d => `
-                  <tr class="border-t border-zinc-700">
-                    <td class="p-2">${d.inning}</td>
-                    <td class="p-2">${d.atBatResult}</td>
-                    <td class="p-2">${d.description || '-'}</td>
-                    <td class="p-2 text-center">${d.pitchesInAB}</td>
-                  </tr>
-                `).join('')}
+                ${details.map(d => `<tr class="border-t border-zinc-700"><td class="p-2">${d.inning}</td><td class="p-2">${d.atBatResult}</td><td class="p-2">${d.description || '-'}</td><td class="p-2 text-center">${d.pitchesInAB}</td></tr>`).join('')}
               </tbody>
             </table>
           </td>
@@ -165,8 +147,8 @@
       row.getElement().after(detailRow);
     }
 
-    // Start loading
-    window.onload = loadData;
+    // Start when everything is loaded
+    window.addEventListener('load', loadData);
   </script>
 </body>
 </html>
