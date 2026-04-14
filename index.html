@@ -27,42 +27,52 @@
   <script>
     let gameData = [];
     let perInningData = [];
-    let currentTable = null;
+    let table = null;
     let currentTab = 0;
 
+    // Improved CSV parser that handles commas inside quotes
     function simpleCSVParse(text) {
+      const rows = [];
       const lines = text.trim().split('\n');
       const headers = lines[0].split(',');
-      const result = [];
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
-        const values = lines[i].split(',');
         const row = {};
-        for (let j = 0; j < headers.length; j++) {
-          let key = headers[j].trim();
-          let value = values[j] !== undefined ? values[j].trim() : '';
-          if (!isNaN(value) && value !== '') value = Number(value);
-          row[key] = value;
+        let value = '';
+        let inQuotes = false;
+        let fieldIndex = 0;
+        for (let char of lines[i]) {
+          if (char === '"' && !inQuotes) { inQuotes = true; continue; }
+          if (char === '"' && inQuotes) { inQuotes = false; continue; }
+          if (char === ',' && !inQuotes) {
+            row[headers[fieldIndex]] = value;
+            value = '';
+            fieldIndex++;
+          } else {
+            value += char;
+          }
         }
-        result.push(row);
+        row[headers[fieldIndex]] = value;
+        rows.push(row);
       }
-      return result;
+      return rows;
     }
 
     async function loadData() {
       const status = document.getElementById("status");
-      status.innerHTML = "🔄 Loading CSVs...";
+      status.innerHTML = "🔄 Loading latest data... (cache-busting)";
+
+      const timestamp = Date.now();
+      const gameUrl = `https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv?t=${timestamp}`;
+      const perUrl = `https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv?t=${timestamp}`;
 
       try {
-        const [gameRes, perRes] = await Promise.all([
-          fetch("https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv?" + Date.now()),
-          fetch("https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv?" + Date.now())
-        ]);
+        const [gameRes, perRes] = await Promise.all([fetch(gameUrl), fetch(perUrl)]);
 
         gameData = simpleCSVParse(await gameRes.text());
         perInningData = simpleCSVParse(await perRes.text());
 
-        status.innerHTML = `✅ Loaded <span class="text-emerald-400">${gameData.length}</span> rows • Latest: ${gameData[0]?.gameDate || 'N/A'}`;
+        status.innerHTML = `✅ Loaded <span class="text-emerald-400">${gameData.length}</span> rows`;
         buildTable();
       } catch (err) {
         status.innerHTML = `❌ Failed: ${err.message}`;
@@ -77,10 +87,10 @@
     }
 
     function buildTable() {
-      if (currentTable) currentTable.destroy();
+      if (table) table.destroy();
 
       const columns = currentTab === 0 ? [
-        {title: "Date", field: "gameDate", width: 110, sorter:"date"},
+        {title: "Date", field: "gameDate", width: 110},
         {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
         {title: "Team", field: "home_team_abbreviation", width: 80},
         {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
@@ -91,7 +101,7 @@
         {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
         {title: "Summary", field: "gameLogSummary", minWidth: 300}
       ] : [
-        {title: "Date", field: "gameDate", width: 110, sorter:"date"},
+        {title: "Date", field: "gameDate", width: 110},
         {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
         {title: "Team", field: "home_team_abbreviation", width: 80},
         {title: "IP", field: "inningsPitched", width: 70, hozAlign: "center"},
@@ -104,20 +114,24 @@
 
       const filtered = gameData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
 
-      currentTable = new Tabulator("#table-container", {
+      table = new Tabulator("#table-container", {
         data: filtered,
         columns: columns,
         layout: "fitColumns",
         pagination: "local",
         paginationSize: 25,
         initialSort: [{column: "gameDate", dir: "desc"}],
-        rowClick: function(e, row) { togglePerInning(row); }
+        rowClick: function(e, row) {
+          console.log("Row clicked!", row.getData()); // Debug
+          togglePerInningDropdown(row);
+        }
       });
     }
 
-    function togglePerInning(row) {
+    function togglePerInningDropdown(row) {
+      // ... (same dropdown code as before - it works once fields are correct)
       const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains("detail-row")) {
+      if (existing && existing.classList.contains('detail-row')) {
         existing.remove();
         return;
       }
@@ -131,7 +145,7 @@
       );
 
       if (details.length === 0) {
-        alert("No per-inning data for this player/game.");
+        alert("No per-inning data for this player/game yet.");
         return;
       }
 
@@ -141,15 +155,13 @@
             <h4 class="font-semibold text-cyan-300 mb-4">Per-Inning / At-Bat Details</h4>
             <table class="w-full text-sm">
               <thead><tr class="bg-zinc-900"><th class="p-3 text-left">Inning</th><th class="p-3 text-left">Result</th><th class="p-3 text-left">Description</th><th class="p-3 text-center">Pitches</th></tr></thead>
-              <tbody>
-                ${details.map(d => `
-                  <tr class="border-t border-zinc-700">
-                    <td class="p-3">${d.inning}</td>
-                    <td class="p-3">${d.atBatResult}</td>
-                    <td class="p-3">${d.description || '-'}</td>
-                    <td class="p-3 text-center">${d.pitchesInAB || '-'}</td>
-                  </tr>
-                `).join('')}
+              <tbody>${details.map(d => `
+                <tr class="border-t border-zinc-700">
+                  <td class="p-3">${d.inning}</td>
+                  <td class="p-3">${d.atBatResult}</td>
+                  <td class="p-3">${d.description || '-'}</td>
+                  <td class="p-3 text-center">${d.pitchesInAB || '-'}</td>
+                </tr>`).join('')}
               </tbody>
             </table>
           </td>
