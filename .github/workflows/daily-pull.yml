@@ -1,6 +1,5 @@
 name: Daily MLB Player Game Logs
 
-# Give the workflow permission to read and write to the repo
 permissions:
   contents: write
 
@@ -25,10 +24,13 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Run main.py (pull yesterday's detailed boxscores)
+      - name: Run main.py (pull yesterday's data)
         run: python main.py
 
-      - name: Commit and push new data
+      - name: Merge daily into seasonal file
+        run: python merge_logs.py
+
+      - name: Commit and push updates
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
