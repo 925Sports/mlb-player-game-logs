@@ -1,6 +1,6 @@
 import requests
 import csv
-from datetime import date
+from datetime import date, timedelta
 import time
 
 def get_schedule(date_str):
@@ -20,11 +20,11 @@ def extract_player_rows(game_pk, box_data, game_date):
     for side in ["home", "away"]:
         team_data = box_data.get("teams", {}).get(side, {})
         team_abbr = team_data.get("team", {}).get("abbreviation", "")
-
+        
         for player_key, player in team_data.get("players", {}).items():
             person = player.get("person", {})
-            batting_stats = player.get("stats", {}).get("batting", [{}])[0] if player.get("stats", {}).get("batting") else {}
-            pitching_stats = player.get("stats", {}).get("pitching", [{}])[0] if player.get("stats", {}).get("pitching") else {}
+            batting = player.get("stats", {}).get("batting", [{}])[0] if player.get("stats", {}).get("batting") else {}
+            pitching = player.get("stats", {}).get("pitching", [{}])[0] if player.get("stats", {}).get("pitching") else {}
 
             row = {
                 "gameDate": game_date,
@@ -33,37 +33,38 @@ def extract_player_rows(game_pk, box_data, game_date):
                 "fullName": person.get("fullName"),
                 "primaryPosition": person.get("primaryPosition", {}).get("abbreviation", ""),
                 "home_team_abbreviation": team_abbr,
-                "atBats": batting_stats.get("atBats"),
-                "hits": batting_stats.get("hits"),
-                "doubles": batting_stats.get("doubles"),
-                "triples": batting_stats.get("triples"),
-                "homeRuns": batting_stats.get("homeRuns"),
-                "rbi": batting_stats.get("rbi"),
-                "runs": batting_stats.get("runs"),
-                "strikeOuts": batting_stats.get("strikeOuts"),
-                "baseOnBalls": batting_stats.get("baseOnBalls"),
-                "stolenBases": batting_stats.get("stolenBases"),
-                "caughtStealing": batting_stats.get("caughtStealing"),
-                "groundIntoDoublePlay": batting_stats.get("groundIntoDoublePlay"),
-                "plateAppearances": batting_stats.get("plateAppearances"),
-                "gameLogSummary": batting_stats.get("summary"),
-                "inningsPitched": pitching_stats.get("inningsPitched"),
-                "earnedRuns": pitching_stats.get("earnedRuns"),
-                "hitsAllowed": pitching_stats.get("hits"),
-                "homeRunsAllowed": pitching_stats.get("homeRuns"),
-                "strikeOutsPitching": pitching_stats.get("strikeOuts"),
-                "baseOnBallsPitching": pitching_stats.get("baseOnBalls"),
-                "pitchesThrown": pitching_stats.get("pitchesThrown"),
+                "atBats": batting.get("atBats"),
+                "hits": batting.get("hits"),
+                "doubles": batting.get("doubles"),
+                "triples": batting.get("triples"),
+                "homeRuns": batting.get("homeRuns"),
+                "rbi": batting.get("rbi"),
+                "runs": batting.get("runs"),
+                "strikeOuts": batting.get("strikeOuts"),
+                "baseOnBalls": batting.get("baseOnBalls"),
+                "stolenBases": batting.get("stolenBases"),
+                "caughtStealing": batting.get("caughtStealing"),
+                "groundIntoDoublePlay": batting.get("groundIntoDoublePlay"),
+                "plateAppearances": batting.get("plateAppearances"),
+                "gameLogSummary": batting.get("summary"),
+                "inningsPitched": pitching.get("inningsPitched"),
+                "earnedRuns": pitching.get("earnedRuns"),
+                "hitsAllowed": pitching.get("hits"),
+                "homeRunsAllowed": pitching.get("homeRuns"),
+                "strikeOutsPitching": pitching.get("strikeOuts"),
+                "baseOnBallsPitching": pitching.get("baseOnBalls"),
+                "pitchesThrown": pitching.get("pitchesThrown"),
                 "note": player.get("note"),   # Decision (W, L, SV, etc.)
             }
             rows.append(row)
     return rows
 
 def main():
-    today = date.today().strftime("%Y-%m-%d")
-    print(f"🚀 Pulling detailed boxscore data for {today}")
+    # Pull YESTERDAY's games so they are guaranteed "Final"
+    yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    print(f"🚀 Pulling detailed boxscore data for YESTERDAY: {yesterday}")
 
-    schedule = get_schedule(today)
+    schedule = get_schedule(yesterday)
     games = schedule.get("dates", [{}])[0].get("games", [])
 
     all_rows = []
@@ -75,7 +76,7 @@ def main():
 
         try:
             box = get_boxscore(game_pk)
-            new_rows = extract_player_rows(game_pk, box, today)
+            new_rows = extract_player_rows(game_pk, box, yesterday)
             all_rows.extend(new_rows)
             print(f"✅ Added {len(new_rows)} players from game {game_pk}")
             time.sleep(1.5)
@@ -83,14 +84,14 @@ def main():
             print(f"⚠️ Error on game {game_pk}: {e}")
 
     if all_rows:
-        filename = f"mlb_player_game_logs_{today}.csv"
+        filename = f"mlb_player_game_logs_{yesterday}.csv"
         with open(filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
             writer.writeheader()
             writer.writerows(all_rows)
         print(f"✅ Saved {len(all_rows)} rows to {filename}")
     else:
-        print("No games found for today.")
+        print("No completed games found for yesterday.")
 
 if __name__ == "__main__":
     main()
