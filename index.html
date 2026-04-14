@@ -1,180 +1,149 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MLB 2026 Player Game Logs</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLB 2026 Player Game Logs</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.1/js/tabulator.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.1/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; }
+        .tab-active { border-bottom: 3px solid #1e40af; font-weight: 600; }
+    </style>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen">
-  <div class="max-w-7xl mx-auto p-6">
-    <h1 class="text-4xl font-bold mb-6 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-      MLB 2026 Player Game Logs
-    </h1>
+<body class="bg-gray-950 text-gray-100 p-4 md:p-8">
 
-    <div class="flex gap-6 border-b border-zinc-700 mb-6">
-      <button onclick="switchTab(0)" id="tab0" class="tab-active px-8 py-3 text-lg font-medium">Batters</button>
-      <button onclick="switchTab(1)" id="tab1" class="px-8 py-3 text-lg font-medium">Pitchers</button>
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-6 text-center">MLB 2026 Player Game Logs</h1>
+    
+    <div class="flex border-b border-gray-700 mb-6">
+        <button onclick="switchTab(0)" id="tab-batters" class="tab-active px-8 py-3 text-lg">Batters</button>
+        <button onclick="switchTab(1)" id="tab-pitchers" class="px-8 py-3 text-lg">Pitchers</button>
     </div>
 
-    <div id="status" class="mb-6 text-lg"></div>
-    <div id="table-container" class="bg-zinc-900 rounded-2xl"></div>
-  </div>
+    <div id="status" class="mb-4 text-sm text-gray-400"></div>
+    <div id="table-container"></div>
+</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
+<script>
+// === CONFIG ===
+const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
 
-  <script>
-    let gameData = [];
-    let perInningData = [];
-    let table = null;
-    let currentTab = 0;
+// Global variables
+let allData = [];
+let currentTab = 0; // 0 = Batters, 1 = Pitchers
+let table = null;
 
-    // Improved CSV parser that handles commas inside quotes
-    function simpleCSVParse(text) {
-      const rows = [];
-      const lines = text.trim().split('\n');
-      const headers = lines[0].split(',');
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        const row = {};
-        let value = '';
-        let inQuotes = false;
-        let fieldIndex = 0;
-        for (let char of lines[i]) {
-          if (char === '"' && !inQuotes) { inQuotes = true; continue; }
-          if (char === '"' && inQuotes) { inQuotes = false; continue; }
-          if (char === ',' && !inQuotes) {
-            row[headers[fieldIndex]] = value;
-            value = '';
-            fieldIndex++;
-          } else {
-            value += char;
-          }
+// Switch between tabs
+function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tab-batters').classList.toggle('tab-active', tab === 0);
+    document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 1);
+    buildTable();
+}
+
+// Build the Tabulator table with correct filtering
+function buildTable() {
+    const container = document.getElementById('table-container');
+    container.innerHTML = '';
+
+    // Filter data
+    let filteredData = allData.filter(row => {
+        const pos = (row.primaryPosition_name || "").toLowerCase();
+        const isPitcher = pos.includes("pitcher") || 
+                         (row.inningsPitched && row.inningsPitched.toString().trim() !== "" && row.inningsPitched !== "0");
+        
+        if (currentTab === 0) { // Batters tab
+            return !isPitcher && (row.atBats || row.atBats === 0);
+        } else { // Pitchers tab
+            return isPitcher;
         }
-        row[headers[fieldIndex]] = value;
-        rows.push(row);
-      }
-      return rows;
+    });
+
+    // Define columns - different for each tab
+    let columns = [
+        { title: "Date", field: "gameDate", width: 110, sorter: "date", sorterParams: {format: "yyyy-MM-dd"} },
+        { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
+        { title: "Team", field: "teamAbbrev", width: 80 },
+        { title: "Position", field: "primaryPosition_name", width: 120 }
+    ];
+
+    if (currentTab === 0) { // Batters columns
+        columns = columns.concat([
+            { title: "AB", field: "atBats", width: 70 },
+            { title: "H", field: "hits", width: 70 },
+            { title: "HR", field: "homeRuns", width: 70 },
+            { title: "RBI", field: "rbi", width: 70 },
+            { title: "R", field: "runs", width: 70 },
+            { title: "K", field: "strikeOuts", width: 70 },
+            { title: "BB", field: "baseOnBalls", width: 70 },
+            { title: "SB", field: "stolenBases", width: 70 },
+            { title: "Summary", field: "gameLogSummary", minWidth: 250, formatter: "plaintext" }
+        ]);
+    } else { // Pitchers columns
+        columns = columns.concat([
+            { title: "IP", field: "inningsPitched", width: 80 },
+            { title: "ER", field: "earnedRuns", width: 70 },
+            { title: "H", field: "hitsAllowed", width: 70 },
+            { title: "HR", field: "homeRunsAllowed", width: 70 },
+            { title: "K", field: "strikeOutsPitching", width: 70 },
+            { title: "BB", field: "baseOnBallsPitching", width: 70 },
+            { title: "Pitches", field: "pitchesThrown", width: 90 },
+            { title: "Decision", field: "note", width: 100 },
+            { title: "Summary", field: "gameLogSummary", minWidth: 250, formatter: "plaintext" }
+        ]);
     }
 
-    async function loadData() {
-      const status = document.getElementById("status");
-      status.innerHTML = "🔄 Loading latest data... (cache-busting)";
-
-      const timestamp = Date.now();
-      const gameUrl = `https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv?t=${timestamp}`;
-      const perUrl = `https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv?t=${timestamp}`;
-
-      try {
-        const [gameRes, perRes] = await Promise.all([fetch(gameUrl), fetch(perUrl)]);
-
-        gameData = simpleCSVParse(await gameRes.text());
-        perInningData = simpleCSVParse(await perRes.text());
-
-        status.innerHTML = `✅ Loaded <span class="text-emerald-400">${gameData.length}</span> rows`;
-        buildTable();
-      } catch (err) {
-        status.innerHTML = `❌ Failed: ${err.message}`;
-      }
-    }
-
-    function switchTab(n) {
-      currentTab = n;
-      document.getElementById("tab0").classList.toggle("tab-active", n === 0);
-      document.getElementById("tab1").classList.toggle("tab-active", n === 1);
-      buildTable();
-    }
-
-    function buildTable() {
-      if (table) table.destroy();
-
-      const columns = currentTab === 0 ? [
-        {title: "Date", field: "gameDate", width: 110},
-        {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 80},
-        {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
-        {title: "H", field: "hits", width: 60, hozAlign: "center"},
-        {title: "HR", field: "homeRuns", width: 60, hozAlign: "center"},
-        {title: "RBI", field: "rbi", width: 60, hozAlign: "center"},
-        {title: "K", field: "strikeOuts", width: 60, hozAlign: "center"},
-        {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
-        {title: "Summary", field: "gameLogSummary", minWidth: 300}
-      ] : [
-        {title: "Date", field: "gameDate", width: 110},
-        {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 80},
-        {title: "IP", field: "inningsPitched", width: 70, hozAlign: "center"},
-        {title: "ER", field: "earnedRuns", width: 60, hozAlign: "center"},
-        {title: "K", field: "strikeOutsPitching", width: 60, hozAlign: "center"},
-        {title: "BB", field: "baseOnBallsPitching", width: 60, hozAlign: "center"},
-        {title: "Decision", field: "note", width: 160},
-        {title: "Summary", field: "gameLogSummary", minWidth: 300}
-      ];
-
-      const filtered = gameData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
-
-      table = new Tabulator("#table-container", {
-        data: filtered,
+    table = new Tabulator("#table-container", {
+        data: filteredData,
         columns: columns,
         layout: "fitColumns",
         pagination: "local",
-        paginationSize: 25,
+        paginationSize: 50,
+        paginationSizeSelector: [25, 50, 100, 250],
         initialSort: [{column: "gameDate", dir: "desc"}],
-        rowClick: function(e, row) {
-          console.log("Row clicked!", row.getData()); // Debug
-          togglePerInningDropdown(row);
+        headerFilterLiveFilterDelay: 300,
+        responsiveLayout: "collapse",
+    });
+}
+
+// Load CSV and initialize
+async function init() {
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = "🔄 Loading latest data...";
+
+    try {
+        const response = await fetch(CSV_URL + "?t=" + Date.now());
+        const text = await response.text();
+        
+        // Simple CSV parser (no PapaParse dependency)
+        const lines = text.trim().split('\n');
+        const headers = lines[0].split(',');
+        allData = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            const row = {};
+            headers.forEach((header, index) => {
+                row[header.trim()] = values[index] ? values[index].replace(/^"|"$/g, '').trim() : '';
+            });
+            allData.push(row);
         }
-      });
+
+        statusEl.innerHTML = `✅ Loaded <strong>${allData.length}</strong> player game logs`;
+        buildTable(); // Build initial Batters tab
+        
+    } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = `❌ Failed to load data: ${err.message}`;
     }
+}
 
-    function togglePerInningDropdown(row) {
-      // ... (same dropdown code as before - it works once fields are correct)
-      const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains('detail-row')) {
-        existing.remove();
-        return;
-      }
+// Start when page loads
+window.onload = init;
+</script>
 
-      const gamePk = row.getData().gamePk;
-      const playerId = row.getData().playerId;
-
-      const details = perInningData.filter(d => 
-        String(d.gamePk) === String(gamePk) &&
-        (currentTab === 0 ? String(d.batterId) === String(playerId) : String(d.pitcherId) === String(playerId))
-      );
-
-      if (details.length === 0) {
-        alert("No per-inning data for this player/game yet.");
-        return;
-      }
-
-      const html = `
-        <tr class="detail-row bg-zinc-800">
-          <td colspan="20" class="p-6">
-            <h4 class="font-semibold text-cyan-300 mb-4">Per-Inning / At-Bat Details</h4>
-            <table class="w-full text-sm">
-              <thead><tr class="bg-zinc-900"><th class="p-3 text-left">Inning</th><th class="p-3 text-left">Result</th><th class="p-3 text-left">Description</th><th class="p-3 text-center">Pitches</th></tr></thead>
-              <tbody>${details.map(d => `
-                <tr class="border-t border-zinc-700">
-                  <td class="p-3">${d.inning}</td>
-                  <td class="p-3">${d.atBatResult}</td>
-                  <td class="p-3">${d.description || '-'}</td>
-                  <td class="p-3 text-center">${d.pitchesInAB || '-'}</td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </td>
-        </tr>
-      `;
-
-      const newRow = document.createElement("tr");
-      newRow.className = "detail-row";
-      newRow.innerHTML = html;
-      row.getElement().after(newRow);
-    }
-
-    window.onload = loadData;
-  </script>
 </body>
 </html>
