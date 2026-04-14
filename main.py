@@ -4,7 +4,7 @@ from datetime import date
 import time
 
 def get_schedule(date_str):
-    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}&gameType=R"
+    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}&gameType=R&hydrate=team,linescore,decisions,person,stats"
     r = requests.get(url)
     r.raise_for_status()
     return r.json()
@@ -23,8 +23,8 @@ def extract_player_rows(game_pk, box_data, game_date):
 
         for player_key, player in team_data.get("players", {}).items():
             person = player.get("person", {})
-            batting = player.get("stats", {}).get("batting", [{}])[0] if player.get("stats", {}).get("batting") else {}
-            pitching = player.get("stats", {}).get("pitching", [{}])[0] if player.get("stats", {}).get("pitching") else {}
+            batting_stats = player.get("stats", {}).get("batting", [{}])[0] if player.get("stats", {}).get("batting") else {}
+            pitching_stats = player.get("stats", {}).get("pitching", [{}])[0] if player.get("stats", {}).get("pitching") else {}
 
             row = {
                 "gameDate": game_date,
@@ -33,28 +33,28 @@ def extract_player_rows(game_pk, box_data, game_date):
                 "fullName": person.get("fullName"),
                 "primaryPosition": person.get("primaryPosition", {}).get("abbreviation", ""),
                 "home_team_abbreviation": team_abbr,
-                "atBats": batting.get("atBats"),
-                "hits": batting.get("hits"),
-                "doubles": batting.get("doubles"),
-                "triples": batting.get("triples"),
-                "homeRuns": batting.get("homeRuns"),
-                "rbi": batting.get("rbi"),
-                "runs": batting.get("runs"),
-                "strikeOuts": batting.get("strikeOuts"),
-                "baseOnBalls": batting.get("baseOnBalls"),
-                "stolenBases": batting.get("stolenBases"),
-                "caughtStealing": batting.get("caughtStealing"),
-                "groundIntoDoublePlay": batting.get("groundIntoDoublePlay"),
-                "plateAppearances": batting.get("plateAppearances"),
-                "gameLogSummary": batting.get("summary"),
-                "inningsPitched": pitching.get("inningsPitched"),
-                "earnedRuns": pitching.get("earnedRuns"),
-                "hitsAllowed": pitching.get("hits"),
-                "homeRunsAllowed": pitching.get("homeRuns"),
-                "strikeOutsPitching": pitching.get("strikeOuts"),
-                "baseOnBallsPitching": pitching.get("baseOnBalls"),
-                "pitchesThrown": pitching.get("pitchesThrown"),
-                "note": player.get("note"),  # Decision (W, L, SV, etc.)
+                "atBats": batting_stats.get("atBats"),
+                "hits": batting_stats.get("hits"),
+                "doubles": batting_stats.get("doubles"),
+                "triples": batting_stats.get("triples"),
+                "homeRuns": batting_stats.get("homeRuns"),
+                "rbi": batting_stats.get("rbi"),
+                "runs": batting_stats.get("runs"),
+                "strikeOuts": batting_stats.get("strikeOuts"),
+                "baseOnBalls": batting_stats.get("baseOnBalls"),
+                "stolenBases": batting_stats.get("stolenBases"),
+                "caughtStealing": batting_stats.get("caughtStealing"),
+                "groundIntoDoublePlay": batting_stats.get("groundIntoDoublePlay"),
+                "plateAppearances": batting_stats.get("plateAppearances"),
+                "gameLogSummary": batting_stats.get("summary"),
+                "inningsPitched": pitching_stats.get("inningsPitched"),
+                "earnedRuns": pitching_stats.get("earnedRuns"),
+                "hitsAllowed": pitching_stats.get("hits"),
+                "homeRunsAllowed": pitching_stats.get("homeRuns"),
+                "strikeOutsPitching": pitching_stats.get("strikeOuts"),
+                "baseOnBallsPitching": pitching_stats.get("baseOnBalls"),
+                "pitchesThrown": pitching_stats.get("pitchesThrown"),
+                "note": player.get("note"),   # Decision (W, L, SV, etc.)
             }
             rows.append(row)
     return rows
