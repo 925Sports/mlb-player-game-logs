@@ -166,13 +166,7 @@
                 })
                 .map(row => {
                     const extra = getOpponentAndResult(row);
-                    return { 
-                        ...row, 
-                        opponent: extra.opponent, 
-                        result: extra.result, 
-                        isHome: extra.isHome, 
-                        dayNight: extra.dayNight 
-                    };
+                    return { ...row, opponent: extra.opponent, result: extra.result, isHome: extra.isHome, dayNight: extra.dayNight };
                 });
 
             table = new Tabulator("#table-container", {
@@ -214,7 +208,7 @@
                                    String(p.pitcherId || p.pitcher_id) === String(rowData.playerId))
             );
 
-            let html = `<table class="w-full text-sm"><thead class="bg-zinc-800"><tr>
+            let html = `<table class="w-full text-sm border-collapse"><thead class="bg-zinc-800 sticky top-0"><tr>
                 <th class="p-3 text-left">Inning</th>
                 <th class="p-3 text-left">Result</th>
                 <th class="p-3 text-left">Description</th>
@@ -224,7 +218,7 @@
             </tr></thead><tbody>`;
 
             if (details.length === 0) {
-                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">No per-inning details found.</td></tr>`;
+                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">No per-inning details found for this player in this game.</td></tr>`;
             } else {
                 details.forEach(d => {
                     html += `<tr class="border-t border-zinc-700 hover:bg-zinc-800">
