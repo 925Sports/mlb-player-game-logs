@@ -8,7 +8,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
   
-  <!-- Load libraries with defer so they finish before our code runs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js" defer></script>
   <script src="https://cdn.tailwindcss.com" defer></script>
@@ -19,7 +18,7 @@
       <h1 class="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
         MLB 2026 Player Game Logs
       </h1>
-      <div id="status" class="text-sm font-medium"></div>
+      <div id="status" class="text-sm font-medium text-emerald-400"></div>
     </div>
 
     <div class="flex gap-4 border-b border-zinc-700 mb-6">
@@ -27,11 +26,10 @@
       <button onclick="switchTab(1)" id="tab-pitchers" class="px-6 py-3 text-lg font-medium">Pitchers</button>
     </div>
 
-    <div id="debug-info" class="mb-4 text-xs bg-zinc-900 p-3 rounded-lg"></div>
+    <div id="debug" class="mb-4 text-xs bg-zinc-900 p-3 rounded-lg"></div>
     <div id="table-container" class="bg-zinc-900 rounded-xl shadow-xl overflow-hidden"></div>
   </div>
 
-  <!-- Custom script at the VERY END of the body -->
   <script>
     let gameLogData = [];
     let perInningData = [];
@@ -43,23 +41,35 @@
 
     async function loadData() {
       const statusEl = document.getElementById("status");
-      statusEl.innerHTML = `🔄 Loading CSVs...`;
+      statusEl.textContent = "🔄 Loading CSVs...";
 
       try {
         const [gameRes, perRes] = await Promise.all([fetch(CSV_GAME_LOG), fetch(CSV_PER_INNING)]);
 
-        gameLogData = Papa.parse(await gameRes.text(), {header: true, dynamicTyping: true}).data;
-        perInningData = Papa.parse(await perRes.text(), {header: true, dynamicTyping: true}).data;
+        // Important: skip first row if it's not headers (your CSV has data in row 1)
+        const gameText = await gameRes.text();
+        gameLogData = Papa.parse(gameText, {header: false, dynamicTyping: true, skipEmptyLines: true}).data;
+        
+        // Use the second row as headers (first real header row in your file)
+        const headers = gameLogData[0];
+        gameLogData = gameLogData.slice(1).map(row => {
+          let obj = {};
+          headers.forEach((h, i) => obj[h || `col${i}`] = row[i]);
+          return obj;
+        });
 
-        document.getElementById("debug-info").innerHTML = `
+        perInningData = Papa.parse(await perRes.text(), {header: true, dynamicTyping: true, skipEmptyLines: true}).data;
+
+        document.getElementById("debug").innerHTML = `
           ✅ Game logs: <span class="text-cyan-400">${gameLogData.length}</span> rows<br>
-          ✅ Per-inning: <span class="text-cyan-400">${perInningData.length}</span> rows
+          ✅ Per-inning: <span class="text-cyan-400">${perInningData.length}</span> rows<br>
+          First date: ${gameLogData[0]?.gameDate || gameLogData[0]?.col0 || '—'}
         `;
 
-        statusEl.innerHTML = `✅ Ready`;
+        statusEl.textContent = `✅ Loaded ${gameLogData.length} rows`;
         buildTable();
       } catch (err) {
-        statusEl.innerHTML = `❌ Load failed`;
+        statusEl.innerHTML = `❌ Failed to load: ${err.message}`;
         console.error(err);
       }
     }
@@ -97,7 +107,10 @@
         {title: "Summary", field: "gameLogSummary", minWidth: 300}
       ];
 
-      const filtered = gameLogData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
+      const filtered = gameLogData.filter(row => {
+        if (currentTab === 0) return row.atBats != null || row.atBats === 0;
+        return row.inningsPitched != null || row.inningsPitched === 0;
+      });
 
       table = new Tabulator("#table-container", {
         data: filtered,
@@ -112,7 +125,10 @@
 
     function togglePerInningDropdown(row) {
       const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains('detail-row')) { existing.remove(); return; }
+      if (existing && existing.classList.contains('detail-row')) {
+        existing.remove();
+        return;
+      }
 
       const gamePk = row.getData().gamePk;
       const playerId = row.getData().playerId;
@@ -123,7 +139,7 @@
       );
 
       if (details.length === 0) {
-        alert("No per-inning data for this player/game yet.");
+        alert("No per-inning data found for this player/game.");
         return;
       }
 
@@ -134,7 +150,14 @@
             <table class="w-full text-sm">
               <thead><tr class="bg-zinc-900"><th class="p-2 text-left">Inning</th><th class="p-2 text-left">Result</th><th class="p-2 text-left">Description</th><th class="p-2 text-center">Pitches</th></tr></thead>
               <tbody>
-                ${details.map(d => `<tr class="border-t border-zinc-700"><td class="p-2">${d.inning}</td><td class="p-2">${d.atBatResult}</td><td class="p-2">${d.description || '-'}</td><td class="p-2 text-center">${d.pitchesInAB}</td></tr>`).join('')}
+                ${details.map(d => `
+                  <tr class="border-t border-zinc-700">
+                    <td class="p-2">${d.inning}</td>
+                    <td class="p-2">${d.atBatResult}</td>
+                    <td class="p-2">${d.description || '-'}</td>
+                    <td class="p-2 text-center">${d.pitchesInAB}</td>
+                  </tr>
+                `).join('')}
               </tbody>
             </table>
           </td>
@@ -147,7 +170,6 @@
       row.getElement().after(detailRow);
     }
 
-    // Start when everything is loaded
     window.addEventListener('load', loadData);
   </script>
 </body>
