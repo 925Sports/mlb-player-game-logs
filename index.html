@@ -17,8 +17,29 @@
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
         <h1 class="text-4xl font-bold mb-2">MLB 2026 Player Game Logs</h1>
-        <div id="last-updated" class="text-sm text-zinc-400 mb-6"></div>
+        <div id="last-updated" class="text-sm text-zinc-400 mb-4"></div>
 
+        <!-- Splits Filters -->
+        <div class="flex gap-4 mb-6 bg-zinc-900 p-4 rounded-xl">
+            <div>
+                <label class="text-xs text-zinc-400 block mb-1">Home / Away</label>
+                <select id="split-homeaway" onchange="applyFilters()" class="bg-zinc-800 text-white px-4 py-2 rounded-lg">
+                    <option value="">All Games</option>
+                    <option value="Home">Home Only</option>
+                    <option value="Away">Away Only</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-zinc-400 block mb-1">Day / Night</label>
+                <select id="split-daynight" onchange="applyFilters()" class="bg-zinc-800 text-white px-4 py-2 rounded-lg">
+                    <option value="">All</option>
+                    <option value="day">Day Games</option>
+                    <option value="night">Night Games</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tabs -->
         <div class="flex border-b border-zinc-700 mb-6">
             <button onclick="switchTab(0)" id="tab-batters" class="tab px-8 py-4 text-lg tab-active">Batters</button>
             <button onclick="switchTab(1)" id="tab-pitchers" class="tab px-8 py-4 text-lg">Pitchers</button>
@@ -27,7 +48,7 @@
         <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"></div>
     </div>
 
-    <!-- Per-Inning Modal -->
+    <!-- Per-Inning Popup Modal -->
     <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 modal">
         <div class="bg-zinc-900 rounded-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
             <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
@@ -80,7 +101,7 @@
                 document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
                 buildTable();
             } catch (err) {
-                console.error("Load error:", err);
+                console.error(err);
             }
         }
 
@@ -88,7 +109,7 @@
             const isHome = row.home_team_abbreviation === row.teamAbbrev;
             const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
             const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
-            return { opponent: `vs ${opponent}`, result };
+            return { opponent: `vs ${opponent}`, result, isHome: isHome ? "Home" : "Away", dayNight: row.dayNight || "" };
         }
 
         function buildTable() {
@@ -98,12 +119,12 @@
             const isBatters = currentTab === 0;
 
             const columns = [
-                { title: "Date", field: "gameDate", width: 110 },
-                { title: "Player", field: "fullName", width: 220 },
-                { title: "Team", field: "teamAbbrev", width: 80 },
-                { title: "Opponent", field: "opponent", width: 110 },
+                { title: "Date", field: "gameDate", width: 110, headerFilter: "input" },
+                { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
+                { title: "Team", field: "teamAbbrev", width: 80, headerFilter: "input" },
+                { title: "Opponent", field: "opponent", width: 110, headerFilter: "input" },
                 { title: "Result", field: "result", width: 100 },
-                { title: "Pos", field: "primaryPosition_name", width: 100 },
+                { title: "Pos", field: "primaryPosition_name", width: 100, headerFilter: "input" },
             ];
 
             if (isBatters) {
@@ -155,27 +176,44 @@
             });
         }
 
+        function applyFilters() {
+            if (!table) return;
+            const homeAway = document.getElementById('split-homeaway').value;
+            const dayNight = document.getElementById('split-daynight').value;
+
+            table.setFilter(row => {
+                if (homeAway && row.isHome !== homeAway) return false;
+                if (dayNight && row.dayNight !== dayNight) return false;
+                return true;
+            });
+        }
+
         function showPerInningModal(rowData) {
             const modal = document.getElementById('modal');
             const title = document.getElementById('modal-title');
             const content = document.getElementById('modal-content');
 
-            title.textContent = `${rowData.fullName} - ${rowData.gameDate} vs ${rowData.opponent.replace('vs ', '')}`;
+            title.textContent = `${rowData.fullName} — ${rowData.gameDate} ${rowData.opponent}`;
 
-            // Filter per-inning data for this player + game
             const details = perInningData.filter(p => 
                 p.gamePk === rowData.gamePk && 
                 (currentTab === 0 ? p.batterId === rowData.playerId : p.pitcherId === rowData.playerId)
             );
 
-            let html = `<table class="w-full text-sm"><thead class="bg-zinc-800"><tr>`;
-            html += `<th class="p-3 text-left">Inning</th><th class="p-3 text-left">Result</th><th class="p-3 text-left">Description</th><th class="p-3 text-left">Pitches</th><th class="p-3 text-left">RBI</th><th class="p-3 text-left">Runs</th></tr></thead><tbody>`;
+            let html = `<table class="w-full text-sm border-collapse"><thead class="bg-zinc-800"><tr>
+                <th class="p-3 text-left">Inning</th>
+                <th class="p-3 text-left">Result</th>
+                <th class="p-3 text-left">Description</th>
+                <th class="p-3 text-left">Pitches</th>
+                <th class="p-3 text-left">RBI</th>
+                <th class="p-3 text-left">Runs</th>
+            </tr></thead><tbody>`;
 
             if (details.length === 0) {
-                html += `<tr><td colspan="6" class="p-6 text-center text-zinc-400">No per-inning details available for this game.</td></tr>`;
+                html += `<tr><td colspan="6" class="p-8 text-center text-zinc-400">No per-inning details found for this game.</td></tr>`;
             } else {
                 details.forEach(d => {
-                    html += `<tr class="border-t border-zinc-700">
+                    html += `<tr class="border-t border-zinc-700 hover:bg-zinc-800">
                         <td class="p-3">${d.inning || ''}</td>
                         <td class="p-3">${d.atBatResult || ''}</td>
                         <td class="p-3">${d.description || ''}</td>
