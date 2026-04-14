@@ -2,34 +2,32 @@ name: Daily MLB Player Game Logs
 
 on:
   schedule:
-    - cron: '0 4 * * *'   # 4 AM UTC = ~11 PM CDT
-  workflow_dispatch:
+    - cron: '0 5 * * *'   # Runs every day at 5 AM UTC (midnight CDT)
+  workflow_dispatch:      # Allows manual run
 
 jobs:
   daily-pull:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - run: pip install requests
+      - name: Install dependencies
+        run: pip install requests
 
-      - name: Run Daily Boxscore Pull (Append)
+      - name: Run main.py (pull yesterday's detailed boxscores)
         run: python main.py
 
-      - name: Commit updated seasonal file
+      - name: Commit and push new data
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add mlb_2026_season_game_logs.csv || true
-          git commit -m "Daily MLB game logs append - $(date)" || echo "No new data"
-          git push || true
+          git add "*.csv"                  # ← This line now catches BOTH daily + seasonal files
+          git commit -m "Daily MLB game logs update - $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
