@@ -4,17 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MLB 2026 Player Game Logs</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
+  <style>
+    .tab-active { border-bottom: 4px solid #22d3ee; color: #67e8f9; }
+  </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
   <div class="max-w-7xl mx-auto p-6">
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex justify-between items-center mb-8">
       <h1 class="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
         MLB 2026 Player Game Logs
       </h1>
-      <div id="status" class="text-sm font-medium text-emerald-400"></div>
+      <div id="status" class="text-emerald-400"></div>
     </div>
 
     <div class="flex gap-4 border-b border-zinc-700 mb-6">
@@ -22,56 +27,30 @@
       <button onclick="switchTab(1)" id="tab-pitchers" class="px-6 py-3 text-lg font-medium">Pitchers</button>
     </div>
 
-    <div id="debug" class="mb-4 p-3 bg-zinc-900 rounded text-xs"></div>
-    <div id="table-container" class="bg-zinc-900 rounded-xl shadow-xl"></div>
+    <div id="table-container" class="bg-zinc-900 rounded-xl shadow-2xl"></div>
   </div>
-
-  <!-- Load libraries BEFORE our code -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
 
   <script>
     let gameLogData = [];
     let perInningData = [];
-    let tableInstance;
+    let table;
     let currentTab = 0;
 
     const GAME_LOG_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
     const PER_INNING_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv";
 
-    async function loadAllData() {
-      const status = document.getElementById("status");
-      const debug = document.getElementById("debug");
-
-      status.textContent = "Loading CSVs...";
+    async function loadData() {
+      document.getElementById("status").innerHTML = "🔄 Loading data...";
 
       try {
-        const [gameResponse, perResponse] = await Promise.all([
-          fetch(GAME_LOG_URL),
-          fetch(PER_INNING_URL)
-        ]);
+        const [gRes, pRes] = await Promise.all([fetch(GAME_LOG_URL), fetch(PER_INNING_URL)]);
+        gameLogData = Papa.parse(await gRes.text(), {header: true, dynamicTyping: true}).data;
+        perInningData = Papa.parse(await pRes.text(), {header: true, dynamicTyping: true}).data;
 
-        if (!gameResponse.ok || !perResponse.ok) {
-          throw new Error("Failed to fetch one or both CSVs");
-        }
-
-        const gameText = await gameResponse.text();
-        const perText = await perResponse.text();
-
-        gameLogData = Papa.parse(gameText, { header: true, dynamicTyping: true }).data;
-        perInningData = Papa.parse(perText, { header: true, dynamicTyping: true }).data;
-
-        debug.innerHTML = `
-          ✅ Game logs: ${gameLogData.length} rows<br>
-          ✅ Per-inning: ${perInningData.length} rows<br>
-          Latest game date: ${gameLogData[0]?.gameDate || 'N/A'}
-        `;
-
-        status.textContent = "✅ Data loaded";
+        document.getElementById("status").innerHTML = `✅ ${gameLogData.length} rows loaded`;
         buildTable();
-      } catch (error) {
-        status.innerHTML = `❌ Error: ${error.message}`;
-        console.error(error);
+      } catch (e) {
+        document.getElementById("status").innerHTML = "❌ Failed to load data";
       }
     }
 
@@ -83,7 +62,7 @@
     }
 
     function buildTable() {
-      if (tableInstance) tableInstance.destroy();
+      if (table) table.destroy();
 
       const columns = currentTab === 0 ? [
         {title: "Date", field: "gameDate", width: 110},
@@ -108,21 +87,16 @@
         {title: "Summary", field: "gameLogSummary", minWidth: 300}
       ];
 
-      const filteredData = gameLogData.filter(row => {
-        if (currentTab === 0) return row.atBats != null;
-        return row.inningsPitched != null;
-      });
+      const filtered = gameLogData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
 
-      tableInstance = new Tabulator("#table-container", {
-        data: filteredData,
+      table = new Tabulator("#table-container", {
+        data: filtered,
         columns: columns,
         layout: "fitColumns",
         pagination: "local",
         paginationSize: 25,
         initialSort: [{column: "gameDate", dir: "desc"}],
-        rowClick: function(e, row) {
-          togglePerInning(row);
-        }
+        rowClick: (e, row) => togglePerInning(row)
       });
     }
 
@@ -137,53 +111,42 @@
       const playerId = row.getData().playerId;
 
       const details = perInningData.filter(p => 
-        String(p.gamePk) === String(gamePk) && 
+        String(p.gamePk) === String(gamePk) &&
         (currentTab === 0 ? String(p.batterId) === String(playerId) : String(p.pitcherId) === String(playerId))
       );
 
       if (details.length === 0) {
-        alert("No per-inning data available for this player in this game.");
+        alert("No per-inning data for this player/game.");
         return;
       }
 
-      const detailHTML = `
+      const html = `
         <tr class="detail-row bg-zinc-800">
           <td colspan="20" class="p-4">
-            <h4 class="font-semibold text-cyan-300 mb-3">Per-Inning / At-Bat Details</h4>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="bg-zinc-900">
-                    <th class="p-3 text-left">Inning</th>
-                    <th class="p-3 text-left">Result</th>
-                    <th class="p-3 text-left">Description</th>
-                    <th class="p-3 text-center">Pitches</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${details.map(d => `
-                    <tr class="border-t border-zinc-700">
-                      <td class="p-3">${d.inning}</td>
-                      <td class="p-3">${d.atBatResult}</td>
-                      <td class="p-3">${d.description || '-'}</td>
-                      <td class="p-3 text-center">${d.pitchesInAB || '-'}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
+            <h4 class="font-semibold text-cyan-300 mb-3">Per-Inning Details</h4>
+            <table class="w-full text-sm">
+              <thead><tr class="bg-zinc-900"><th class="p-2 text-left">Inning</th><th class="p-2 text-left">Result</th><th class="p-2 text-left">Description</th><th class="p-2 text-center">Pitches</th></tr></thead>
+              <tbody>${details.map(d => `
+                <tr class="border-t border-zinc-700">
+                  <td class="p-2">${d.inning}</td>
+                  <td class="p-2">${d.atBatResult}</td>
+                  <td class="p-2">${d.description || '-'}</td>
+                  <td class="p-2 text-center">${d.pitchesInAB}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
           </td>
         </tr>
       `;
 
       const newRow = document.createElement("tr");
       newRow.className = "detail-row";
-      newRow.innerHTML = detailHTML;
+      newRow.innerHTML = html;
       row.getElement().after(newRow);
     }
 
-    // Start the app
-    window.onload = loadAllData;
+    // Start the tool
+    window.onload = loadData;
   </script>
 </body>
 </html>
