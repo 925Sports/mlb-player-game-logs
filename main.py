@@ -1,6 +1,6 @@
 import requests
 import csv
-from datetime import date
+from datetime import date, timedelta
 import time
 
 def get_schedule(date_str):
@@ -60,8 +60,8 @@ def extract_player_rows(game_pk, box_data, game_date):
     return rows
 
 def main():
-    test_date = "2026-04-13"
-    print(f"🚀 DEBUG MODE - Pulling detailed boxscore data for HARD-CODED date: {test_date}")
+    test_date = "2026-04-13"   # Hard-coded for debugging
+    print(f"🚀 DEBUG MODE - Pulling detailed boxscore data for {test_date}")
 
     schedule = get_schedule(test_date)
     games = schedule.get("dates", [{}])[0].get("games", [])
