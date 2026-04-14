@@ -17,7 +17,6 @@
         <h1 class="text-4xl font-bold mb-2">MLB 2026 Player Game Logs</h1>
         <div id="debug-info" class="text-sm text-emerald-400 mb-6"></div>
 
-        <!-- Tabs -->
         <div class="flex border-b border-zinc-700 mb-6">
             <button onclick="switchTab(0)" id="tab-batters" class="tab px-8 py-4 text-lg tab-active">Batters</button>
             <button onclick="switchTab(1)" id="tab-pitchers" class="tab px-8 py-4 text-lg">Pitchers</button>
@@ -46,20 +45,20 @@
                 gameLogData = rows.slice(1).map(row => {
                     const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
                     const obj = {};
-                    headers.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
+                    headers.forEach((h, i) => {
+                        obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '';
+                    });
                     return obj;
                 });
 
-                // Debug output
                 const total = gameLogData.length;
-                const batters = gameLogData.filter(r => parseFloat(r.atBats || 0) > 0).length;
-                const pitchers = gameLogData.filter(r => parseFloat(r.inningsPitched || 0) > 0 || r.note).length;
+                const battersCount = gameLogData.filter(r => parseFloat(r.atBats || 0) > 0).length;
+                const pitchersCount = gameLogData.filter(r => parseFloat(r.inningsPitched || 0) > 0 || r.note).length;
 
                 debugEl.innerHTML = `
                     ✅ Loaded <strong>${total.toLocaleString()}</strong> rows<br>
-                    • Batters with AB &gt; 0: <strong>${batters}</strong><br>
-                    • Pitchers with IP or Decision: <strong>${pitchers}</strong><br>
-                    First row sample: ${JSON.stringify(gameLogData[0] || {}, null, 2).substring(0, 300)}...
+                    • Batters with AB > 0: <strong>${battersCount}</strong><br>
+                    • Pitchers with IP or Decision: <strong>${pitchersCount}</strong>
                 `;
 
                 buildTable();
@@ -70,9 +69,9 @@
 
         function getOpponentAndResult(row) {
             const isHome = row.home_team_abbreviation === row.teamAbbrev;
-            const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
-            const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
-            return { opponent: `vs ${opponent}`, result };
+            const opponentAbbr = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
+            const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score || 0}-${row.away_score || 0}`;
+            return { opponent: `vs ${opponentAbbr}`, result };
         }
 
         function buildTable() {
@@ -99,7 +98,7 @@
                     { title: "R", field: "runs", width: 70 },
                     { title: "K", field: "strikeOuts", width: 70 },
                     { title: "BB", field: "baseOnBalls", width: 70 },
-                    { title: "Summary", field: "gameLogSummary", minWidth: 280 }
+                    { title: "Summary", field: "gameLogSummary", minWidth: 300 }
                 );
             } else {
                 columns.push(
@@ -111,15 +110,18 @@
                     { title: "BB", field: "baseOnBallsPitching", width: 70 },
                     { title: "Pitches", field: "pitchesThrown", width: 90 },
                     { title: "Decision", field: "note", width: 110 },
-                    { title: "Summary", field: "gameLogSummary", minWidth: 280 }
+                    { title: "Summary", field: "gameLogSummary", minWidth: 300 }
                 );
             }
 
-            // Relaxed filter for now (we'll tighten once we confirm data shows)
+            // More relaxed filter to ensure data shows
             const filteredData = gameLogData
                 .filter(row => {
-                    if (isBatters) return parseFloat(row.atBats || 0) > 0;
-                    return parseFloat(row.inningsPitched || 0) > 0 || row.note;
+                    if (isBatters) {
+                        return parseFloat(row.atBats || 0) > 0 || row.primaryPosition_name?.includes("Base") || row.primaryPosition_name?.includes("Outfield");
+                    } else {
+                        return parseFloat(row.inningsPitched || 0) > 0 || row.note || row.primaryPosition_name === "Pitcher";
+                    }
                 })
                 .map(row => {
                     const extra = getOpponentAndResult(row);
@@ -133,7 +135,7 @@
                 pagination: "local",
                 paginationSize: 50,
                 initialSort: [{ column: "gameDate", dir: "desc" }],
-                placeholder: "No data found for this tab",
+                placeholder: "No matching records found",
             });
         }
 
