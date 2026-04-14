@@ -1,144 +1,260 @@
-import requests
-import csv
-import time
-from datetime import date, timedelta
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLB 2026 Player Game Logs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.0/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.0/js/tabulator.min.js"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; }
+        .tab-active { border-bottom: 3px solid #1e40af; font-weight: 600; }
+        .modal { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .tabulator .tabulator-cell { text-align: center; }
+        .tabulator .tabulator-header .tabulator-col { text-align: center; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-6">
+        <h1 class="text-4xl font-bold mb-2">MLB 2026 Player Game Logs</h1>
+        <div id="last-updated" class="text-sm text-zinc-400 mb-6"></div>
 
-def get_schedule(target_date):
-    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={target_date}&gameType=R&hydrate=team,linescore,decisions,person,stats"
-    print(f"Fetching schedule for {target_date}")
-    response = requests.get(url)
-    if response.status_code != 200:
-        print(f"❌ Schedule failed: {response.status_code}")
-        return []
-    return response.json().get("dates", [])
+        <!-- Splits Filters -->
+        <div class="flex gap-6 mb-6 bg-zinc-900 p-5 rounded-xl">
+            <div>
+                <label class="text-xs text-zinc-400 block mb-1">Home / Away</label>
+                <select id="split-homeaway" onchange="applyFilters()" class="bg-zinc-800 text-white px-4 py-2 rounded-lg border border-zinc-700">
+                    <option value="">All Games</option>
+                    <option value="Home">Home Only</option>
+                    <option value="Away">Away Only</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-zinc-400 block mb-1">Day / Night</label>
+                <select id="split-daynight" onchange="applyFilters()" class="bg-zinc-800 text-white px-4 py-2 rounded-lg border border-zinc-700">
+                    <option value="">All</option>
+                    <option value="day">Day Games</option>
+                    <option value="night">Night Games</option>
+                </select>
+            </div>
+        </div>
 
-def get_boxscore(game_pk):
-    url = f"https://statsapi.mlb.com/api/v1/game/{game_pk}/boxscore?hydrate=person"
-    response = requests.get(url)
-    time.sleep(1.5)
-    return response.json() if response.status_code == 200 else None
+        <!-- Tabs -->
+        <div class="flex border-b border-zinc-700 mb-6">
+            <button onclick="switchTab(0)" id="tab-batters" class="tab px-8 py-4 text-lg tab-active">Batters</button>
+            <button onclick="switchTab(1)" id="tab-pitchers" class="tab px-8 py-4 text-lg">Pitchers</button>
+        </div>
 
-def extract_player_rows(game, box_data, game_date):
-    rows = []
-    if not box_data or not game:
-        return rows
+        <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"></div>
+    </div>
 
-    game_info = {
-        "gameDate": game_date,
-        "gamePk": game.get("gamePk"),
-        "gameGuid": game.get("guid"),
-        "link": game.get("link"),
-        "gameType": game.get("gameType"),
-        "season": game.get("season"),
-        "officialDate": game.get("officialDate"),
-        "description": game.get("description"),
-        "dayNight": game.get("dayNight"),
-        "gamedayType": game.get("gamedayType"),
-        "doubleHeader": game.get("doubleHeader"),
-        "tiebreaker": game.get("tiebreaker"),
-        "seriesDescription": game.get("seriesDescription"),
-        "seriesGameNumber": game.get("seriesGameNumber"),
-        "gamesInSeries": game.get("gamesInSeries"),
-        "gameNumber": game.get("gameNumber"),
-        "status_abstractGameState": game.get("status", {}).get("abstractGameState"),
-        "status_detailedState": game.get("status", {}).get("detailedState"),
-        "venue_id": game.get("venue", {}).get("id"),
-        "venue_name": game.get("venue", {}).get("name"),
-        "home_team_id": game.get("teams", {}).get("home", {}).get("team", {}).get("id"),
-        "home_team_name": game.get("teams", {}).get("home", {}).get("team", {}).get("name"),
-        "home_team_abbreviation": game.get("teams", {}).get("home", {}).get("team", {}).get("abbreviation"),
-        "home_score": game.get("teams", {}).get("home", {}).get("score"),
-        "home_isWinner": game.get("teams", {}).get("home", {}).get("isWinner"),
-        "away_team_id": game.get("teams", {}).get("away", {}).get("team", {}).get("id"),
-        "away_team_name": game.get("teams", {}).get("away", {}).get("team", {}).get("name"),
-        "away_team_abbreviation": game.get("teams", {}).get("away", {}).get("team", {}).get("abbreviation"),
-        "away_score": game.get("teams", {}).get("away", {}).get("score"),
-        "away_isWinner": game.get("teams", {}).get("away", {}).get("isWinner"),
-    }
+    <!-- Per-Inning Popup Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 modal">
+        <div class="bg-zinc-900 rounded-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
+                <h2 id="modal-title" class="text-2xl font-semibold"></h2>
+                <button onclick="closeModal()" class="text-zinc-400 hover:text-white text-3xl leading-none">×</button>
+            </div>
+            <div class="p-6 overflow-auto max-h-[70vh]" id="modal-content"></div>
+        </div>
+    </div>
 
-    teams = box_data.get("teams", {})
-    for side in ["home", "away"]:
-        team_data = teams.get(side, {})
-        for player_key, player in team_data.get("players", {}).items():
-            person = player.get("person", {})
-            stats = player.get("stats", {})
-            batting = stats.get("batting", {})
-            pitching = stats.get("pitching", {})
+    <script>
+        let gameLogData = [];
+        let perInningData = [];
+        let currentTab = 0;
+        let table = null;
 
-            row = game_info.copy()
-            row.update({
-                "playerId": person.get("id"),
-                "fullName": person.get("fullName"),
-                "firstName": person.get("firstName"),
-                "lastName": person.get("lastName"),
-                "primaryNumber": person.get("primaryNumber"),
-                "birthDate": person.get("birthDate"),
-                "currentAge": person.get("currentAge"),
-                "height": person.get("height"),
-                "weight": person.get("weight"),
-                "primaryPosition_code": person.get("primaryPosition", {}).get("code"),
-                "primaryPosition_name": person.get("primaryPosition", {}).get("name"),
-                "batSide_code": person.get("batSide", {}).get("code"),
-                "batSide_description": person.get("batSide", {}).get("description"),
-                "pitchHand_code": person.get("pitchHand", {}).get("code"),
-                "pitchHand_description": person.get("pitchHand", {}).get("description"),
-                "gameLogSummary": batting.get("summary") or pitching.get("summary") or "",
-                "note": player.get("note", ""),
-                "atBats": batting.get("atBats"),
-                "hits": batting.get("hits"),
-                "doubles": batting.get("doubles"),
-                "triples": batting.get("triples"),
-                "homeRuns": batting.get("homeRuns"),
-                "rbi": batting.get("rbi"),
-                "runs": batting.get("runs"),
-                "strikeOuts": batting.get("strikeOuts"),
-                "baseOnBalls": batting.get("baseOnBalls"),
-                "stolenBases": batting.get("stolenBases"),
-                "caughtStealing": batting.get("caughtStealing"),
-                "groundIntoDoublePlay": batting.get("groundIntoDoublePlay"),
-                "plateAppearances": batting.get("plateAppearances"),
-                "totalBases": batting.get("totalBases"),
-                "inningsPitched": pitching.get("inningsPitched"),
-                "earnedRuns": pitching.get("earnedRuns"),
-                "hitsAllowed": pitching.get("hits"),
-                "homeRunsAllowed": pitching.get("homeRuns"),
-                "strikeOutsPitching": pitching.get("strikeOuts"),
-                "baseOnBallsPitching": pitching.get("baseOnBalls"),
-                "pitchesThrown": pitching.get("pitchesThrown"),
-                "wins": pitching.get("wins"),
-                "losses": pitching.get("losses"),
-                "saves": pitching.get("saves"),
-            })
-            rows.append(row)
-    return rows
+        const GAME_LOG_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
+        const PER_INNING_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv";
 
-def main():
-    yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
-    print(f"🚀 Starting detailed pull for {yesterday}")
+        async function loadData() {
+            try {
+                const [gameRes, inningRes] = await Promise.all([
+                    fetch(GAME_LOG_URL + '?t=' + Date.now()),
+                    fetch(PER_INNING_URL + '?t=' + Date.now())
+                ]);
 
-    dates = get_schedule(yesterday)
-    all_rows = []
+                const gameText = await gameRes.text();
+                const inningText = await inningRes.text();
 
-    for d in dates:
-        for game in d.get("games", []):
-            game_pk = game.get("gamePk")
-            status = game.get("status", {}).get("abstractGameState", "")
-            if status in ["Final", "Completed Early"]:
-                box_data = get_boxscore(game_pk)
-                if box_data:
-                    rows = extract_player_rows(game, box_data, yesterday)
-                    all_rows.extend(rows)
-                    print(f"  Game {game_pk}: added {len(rows)} rows")
+                // Parse game logs
+                const gameRows = gameText.trim().split('\n');
+                const gameHeaders = gameRows[0].split(',').map(h => h.replace(/"/g, '').trim());
+                gameLogData = gameRows.slice(1).map(row => {
+                    const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                    const obj = {};
+                    gameHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
+                    return obj;
+                });
 
-    if all_rows:
-        filename = f"mlb_player_game_logs_{yesterday}.csv"
-        with open(filename, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(all_rows)
-        print(f"✅ Saved {len(all_rows)} rows to {filename}")
-    else:
-        print("⚠️ No rows collected")
+                // Parse per-inning data
+                const inningRows = inningText.trim().split('\n');
+                const inningHeaders = inningRows[0].split(',').map(h => h.replace(/"/g, '').trim());
+                perInningData = inningRows.slice(1).map(row => {
+                    const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                    const obj = {};
+                    inningHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
+                    return obj;
+                });
 
-if __name__ == "__main__":
-    main()
+                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+                buildTable();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function getOpponentAndResult(row) {
+            const isHome = row.home_team_abbreviation === row.teamAbbrev;
+            const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
+            const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
+            return { 
+                opponent: `vs ${opponent}`, 
+                result: result,
+                isHome: isHome ? "Home" : "Away",
+                dayNight: (row.dayNight || "").toLowerCase()
+            };
+        }
+
+        function buildTable() {
+            const container = document.getElementById('table-container');
+            container.innerHTML = '';
+
+            const isBatters = currentTab === 0;
+
+            const columns = [
+                { title: "Date", field: "gameDate", width: 110, headerFilter: "input", hozAlign: "center" },
+                { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
+                { title: "Team", field: "teamAbbrev", width: 90, headerFilter: "input", hozAlign: "center" },
+                { title: "Opponent", field: "opponent", width: 120, headerFilter: "input", hozAlign: "center" },
+                { title: "Result", field: "result", width: 110, hozAlign: "center" },
+                { title: "Pos", field: "primaryPosition_name", width: 110, headerFilter: "input", hozAlign: "center" },
+            ];
+
+            if (isBatters) {
+                columns.push(
+                    { title: "AB", field: "atBats", width: 70, hozAlign: "center" },
+                    { title: "H", field: "hits", width: 70, hozAlign: "center" },
+                    { title: "HR", field: "homeRuns", width: 70, hozAlign: "center" },
+                    { title: "RBI", field: "rbi", width: 70, hozAlign: "center" },
+                    { title: "R", field: "runs", width: 70, hozAlign: "center" },
+                    { title: "K", field: "strikeOuts", width: 70, hozAlign: "center" },
+                    { title: "BB", field: "baseOnBalls", width: 70, hozAlign: "center" },
+                    { title: "Summary", field: "gameLogSummary", minWidth: 300 }
+                );
+            } else {
+                columns.push(
+                    { title: "IP", field: "inningsPitched", width: 80, hozAlign: "center" },
+                    { title: "ER", field: "earnedRuns", width: 70, hozAlign: "center" },
+                    { title: "H", field: "hitsAllowed", width: 70, hozAlign: "center" },
+                    { title: "HR", field: "homeRunsAllowed", width: 70, hozAlign: "center" },
+                    { title: "K", field: "strikeOutsPitching", width: 70, hozAlign: "center" },
+                    { title: "BB", field: "baseOnBallsPitching", width: 70, hozAlign: "center" },
+                    { title: "Pitches", field: "pitchesThrown", width: 90, hozAlign: "center" },
+                    { title: "Decision", field: "note", width: 110, hozAlign: "center" },
+                    { title: "Summary", field: "gameLogSummary", minWidth: 300 }
+                );
+            }
+
+            const filteredData = gameLogData
+                .filter(row => {
+                    if (isBatters) return parseFloat(row.atBats || 0) > 0;
+                    return parseFloat(row.inningsPitched || 0) > 0 || row.note;
+                })
+                .map(row => {
+                    const extra = getOpponentAndResult(row);
+                    return { 
+                        ...row, 
+                        opponent: extra.opponent, 
+                        result: extra.result, 
+                        isHome: extra.isHome, 
+                        dayNight: extra.dayNight 
+                    };
+                });
+
+            table = new Tabulator("#table-container", {
+                data: filteredData,
+                columns: columns,
+                layout: "fitColumns",
+                pagination: "local",
+                paginationSize: 50,
+                paginationSizeSelector: [25, 50, 100, 250],
+                initialSort: [{ column: "gameDate", dir: "desc" }],
+                rowClick: function(e, row) {
+                    showPerInningModal(row.getData());
+                }
+            });
+        }
+
+        function applyFilters() {
+            if (!table) return;
+            const homeAway = document.getElementById('split-homeaway').value;
+            const dayNight = document.getElementById('split-daynight').value;
+
+            table.setFilter(row => {
+                if (homeAway && row.isHome !== homeAway) return false;
+                if (dayNight && row.dayNight !== dayNight) return false;
+                return true;
+            });
+        }
+
+        function showPerInningModal(rowData) {
+            const modal = document.getElementById('modal');
+            const title = document.getElementById('modal-title');
+            const content = document.getElementById('modal-content');
+
+            title.textContent = `${rowData.fullName} — ${rowData.gameDate} ${rowData.opponent}`;
+
+            const details = perInningData.filter(p => 
+                String(p.gamePk) === String(rowData.gamePk) && 
+                (currentTab === 0 ? String(p.batterId || p.batter_id) === String(rowData.playerId) : 
+                                   String(p.pitcherId || p.pitcher_id) === String(rowData.playerId))
+            );
+
+            let html = `<table class="w-full text-sm"><thead class="bg-zinc-800"><tr>
+                <th class="p-3 text-left">Inning</th>
+                <th class="p-3 text-left">Result</th>
+                <th class="p-3 text-left">Description</th>
+                <th class="p-3 text-left">Pitches</th>
+                <th class="p-3 text-left">RBI</th>
+                <th class="p-3 text-left">Runs</th>
+            </tr></thead><tbody>`;
+
+            if (details.length === 0) {
+                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">No per-inning details found.</td></tr>`;
+            } else {
+                details.forEach(d => {
+                    html += `<tr class="border-t border-zinc-700 hover:bg-zinc-800">
+                        <td class="p-3">${d.inning || ''}</td>
+                        <td class="p-3">${d.atBatResult || d.result || ''}</td>
+                        <td class="p-3">${d.description || ''}</td>
+                        <td class="p-3">${d.pitchesInAB || ''}</td>
+                        <td class="p-3">${d.rbi || '0'}</td>
+                        <td class="p-3">${d.runs || '0'}</td>
+                    </tr>`;
+                });
+            }
+            html += `</tbody></table>`;
+
+            content.innerHTML = html;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('tab-batters').classList.toggle('tab-active', tab === 0);
+            document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 1);
+            buildTable();
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
