@@ -4,25 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MLB 2026 Player Game Logs</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
   <div class="max-w-7xl mx-auto p-6">
-    <h1 class="text-4xl font-bold mb-8 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+    <h1 class="text-4xl font-bold mb-6 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
       MLB 2026 Player Game Logs
     </h1>
 
-    <div class="flex gap-6 border-b border-zinc-700 mb-8">
+    <div class="flex gap-6 border-b border-zinc-700 mb-6">
       <button onclick="switchTab(0)" id="tab0" class="tab-active px-8 py-3 text-lg font-medium">Batters</button>
       <button onclick="switchTab(1)" id="tab1" class="px-8 py-3 text-lg font-medium">Pitchers</button>
     </div>
 
-    <div id="status" class="mb-6 text-lg font-medium"></div>
+    <div id="status" class="mb-6 text-lg text-emerald-400"></div>
     <div id="table-container" class="bg-zinc-900 rounded-2xl"></div>
   </div>
 
-  <!-- Tabulator only -->
+  <!-- Tabulator only (no PapaParse) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
 
   <script>
@@ -31,26 +31,25 @@
     let table = null;
     let currentTab = 0;
 
+    // Simple native CSV parser (no external library)
     function parseCSV(text) {
       const lines = text.trim().split('\n');
       const headers = lines[0].split(',');
       const result = [];
       for (let i = 1; i < lines.length; i++) {
-        const obj = {};
+        const row = {};
         const values = lines[i].split(',');
         for (let j = 0; j < headers.length; j++) {
-          let val = values[j] ? values[j].trim().replace(/^"|"$/g, '') : '';
-          if (!isNaN(val) && val !== '') val = Number(val);
-          obj[headers[j]] = val;
+          row[headers[j]] = values[j] || '';
         }
-        result.push(obj);
+        result.push(row);
       }
       return result;
     }
 
     async function loadData() {
       const status = document.getElementById("status");
-      status.textContent = "🔄 Loading CSVs... (this may take 10-20 seconds)";
+      status.textContent = "🔄 Loading data... (this may take 10-15 seconds)";
 
       try {
         const [gameRes, perRes] = await Promise.all([
@@ -68,7 +67,6 @@
         buildTable();
       } catch (err) {
         status.innerHTML = `❌ Failed to load CSV: ${err.message}`;
-        console.error(err);
       }
     }
 
@@ -105,7 +103,7 @@
         {title: "Summary", field: "gameLogSummary", minWidth: 300}
       ];
 
-      const filtered = gameData.filter(r => currentTab === 0 ? r.atBats != null : r.inningsPitched != null);
+      const filtered = gameData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
 
       table = new Tabulator("#table-container", {
         data: filtered,
@@ -114,13 +112,13 @@
         pagination: "local",
         paginationSize: 25,
         initialSort: [{column: "gameDate", dir: "desc"}],
-        rowClick: (e, row) => togglePerInning(row)
+        rowClick: function(e, row) { togglePerInningDropdown(row); }
       });
     }
 
-    function togglePerInning(row) {
+    function togglePerInningDropdown(row) {
       const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains("detail-row")) {
+      if (existing && existing.classList.contains('detail-row')) {
         existing.remove();
         return;
       }
@@ -129,7 +127,7 @@
       const playerId = row.getData().playerId;
 
       const details = perInningData.filter(d => 
-        String(d.gamePk) === String(gamePk) && 
+        String(d.gamePk) === String(gamePk) &&
         (currentTab === 0 ? String(d.batterId) === String(playerId) : String(d.pitcherId) === String(playerId))
       );
 
