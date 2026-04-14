@@ -2,7 +2,7 @@ name: Daily MLB Player Game Logs
 
 on:
   schedule:
-    - cron: '0 4 * * *'   # Runs at 4 AM UTC (~11 PM CDT)
+    - cron: '0 4 * * *'   # 4 AM UTC = ~11 PM CDT
   workflow_dispatch:
 
 jobs:
@@ -23,10 +23,10 @@ jobs:
 
       - run: pip install requests
 
-      - name: Run Daily Append
+      - name: Run Daily Boxscore Pull (Append)
         run: python main.py
 
-      - name: Commit and push new data
+      - name: Commit updated seasonal file
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
