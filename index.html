@@ -7,26 +7,23 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.0/css/tabulator.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.0/js/tabulator.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; }
-        .tab-active { border-bottom: 3px solid #1e40af; font-weight: 600; color: #60a5fa; }
+        .tab-active { border-bottom: 3px solid #1e40af; font-weight: 600; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-4xl font-bold">MLB 2026 Player Game Logs</h1>
-            <div id="last-updated" class="text-sm text-zinc-400"></div>
-        </div>
+        <h1 class="text-4xl font-bold mb-2">MLB 2026 Player Game Logs</h1>
+        <div id="debug-info" class="text-sm text-emerald-400 mb-6"></div>
 
+        <!-- Tabs -->
         <div class="flex border-b border-zinc-700 mb-6">
             <button onclick="switchTab(0)" id="tab-batters" class="tab px-8 py-4 text-lg tab-active">Batters</button>
             <button onclick="switchTab(1)" id="tab-pitchers" class="tab px-8 py-4 text-lg">Pitchers</button>
         </div>
 
-        <div id="status" class="mb-4 text-sm"></div>
-        <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden"></div>
+        <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"></div>
     </div>
 
     <script>
@@ -37,43 +34,45 @@
         const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
 
         async function loadData() {
-            const statusEl = document.getElementById('status');
-            statusEl.innerHTML = '🔄 Loading data...';
+            const debugEl = document.getElementById('debug-info');
+            debugEl.textContent = '🔄 Loading CSV...';
 
             try {
                 const response = await fetch(CSV_URL + '?t=' + Date.now());
-                const csvText = await response.text();
+                const text = await response.text();
+                const rows = text.trim().split('\n');
+                const headers = rows[0].split(',').map(h => h.replace(/"/g, '').trim());
 
-                Papa.parse(csvText, {
-                    header: true,
-                    dynamicTyping: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        gameLogData = results.data.filter(row => row.gameDate && row.fullName);
-                        
-                        statusEl.innerHTML = `✅ Loaded <strong>${gameLogData.length.toLocaleString()}</strong> rows`;
-                        document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
-                        
-                        buildTable();
-                    },
-                    error: function(err) {
-                        statusEl.innerHTML = `❌ PapaParse error: ${err}`;
-                    }
+                gameLogData = rows.slice(1).map(row => {
+                    const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                    const obj = {};
+                    headers.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
+                    return obj;
                 });
+
+                // Debug output
+                const total = gameLogData.length;
+                const batters = gameLogData.filter(r => parseFloat(r.atBats || 0) > 0).length;
+                const pitchers = gameLogData.filter(r => parseFloat(r.inningsPitched || 0) > 0 || r.note).length;
+
+                debugEl.innerHTML = `
+                    ✅ Loaded <strong>${total.toLocaleString()}</strong> rows<br>
+                    • Batters with AB &gt; 0: <strong>${batters}</strong><br>
+                    • Pitchers with IP or Decision: <strong>${pitchers}</strong><br>
+                    First row sample: ${JSON.stringify(gameLogData[0] || {}, null, 2).substring(0, 300)}...
+                `;
+
+                buildTable();
             } catch (err) {
-                statusEl.innerHTML = `❌ Failed to fetch CSV: ${err.message}`;
+                debugEl.innerHTML = `❌ Failed to load: ${err.message}`;
             }
         }
 
         function getOpponentAndResult(row) {
-            if (!row.home_team_abbreviation) return { opponent: '', result: '' };
-            const isHome = row.teamAbbrev === row.home_team_abbreviation;
-            const opponentAbbr = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
-            const myScore = isHome ? row.home_score : row.away_score;
-            const oppScore = isHome ? row.away_score : row.home_score;
-            const won = (isHome && row.home_isWinner === true) || (!isHome && row.away_isWinner === true);
-            const result = won ? `W ${myScore}-${oppScore}` : `L ${myScore}-${oppScore}`;
-            return { opponent: `vs ${opponentAbbr}`, result };
+            const isHome = row.home_team_abbreviation === row.teamAbbrev;
+            const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
+            const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
+            return { opponent: `vs ${opponent}`, result };
         }
 
         function buildTable() {
@@ -82,65 +81,59 @@
 
             const isBatters = currentTab === 0;
 
-            const baseColumns = [
-                { title: "Date", field: "gameDate", width: 110, sorter: "date", headerFilter: "input" },
-                { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
+            const columns = [
+                { title: "Date", field: "gameDate", width: 110 },
+                { title: "Player", field: "fullName", width: 220 },
                 { title: "Team", field: "teamAbbrev", width: 80 },
                 { title: "Opponent", field: "opponent", width: 110 },
-                { title: "Result", field: "result", width: 110 },
+                { title: "Result", field: "result", width: 100 },
                 { title: "Pos", field: "primaryPosition_name", width: 100 },
             ];
 
-            let extraColumns = [];
             if (isBatters) {
-                extraColumns = [
-                    { title: "AB", field: "atBats", width: 70, sorter: "number" },
-                    { title: "H", field: "hits", width: 70, sorter: "number" },
-                    { title: "HR", field: "homeRuns", width: 70, sorter: "number" },
-                    { title: "RBI", field: "rbi", width: 70, sorter: "number" },
-                    { title: "R", field: "runs", width: 70, sorter: "number" },
-                    { title: "K", field: "strikeOuts", width: 70, sorter: "number" },
-                    { title: "BB", field: "baseOnBalls", width: 70, sorter: "number" },
-                    { title: "Summary", field: "gameLogSummary", minWidth: 280, formatter: "plaintext" }
-                ];
+                columns.push(
+                    { title: "AB", field: "atBats", width: 70 },
+                    { title: "H", field: "hits", width: 70 },
+                    { title: "HR", field: "homeRuns", width: 70 },
+                    { title: "RBI", field: "rbi", width: 70 },
+                    { title: "R", field: "runs", width: 70 },
+                    { title: "K", field: "strikeOuts", width: 70 },
+                    { title: "BB", field: "baseOnBalls", width: 70 },
+                    { title: "Summary", field: "gameLogSummary", minWidth: 280 }
+                );
             } else {
-                extraColumns = [
-                    { title: "IP", field: "inningsPitched", width: 80, sorter: "number" },
-                    { title: "ER", field: "earnedRuns", width: 70, sorter: "number" },
-                    { title: "H", field: "hitsAllowed", width: 70, sorter: "number" },
-                    { title: "HR", field: "homeRunsAllowed", width: 70, sorter: "number" },
-                    { title: "K", field: "strikeOutsPitching", width: 70, sorter: "number" },
-                    { title: "BB", field: "baseOnBallsPitching", width: 70, sorter: "number" },
+                columns.push(
+                    { title: "IP", field: "inningsPitched", width: 80 },
+                    { title: "ER", field: "earnedRuns", width: 70 },
+                    { title: "H", field: "hitsAllowed", width: 70 },
+                    { title: "HR", field: "homeRunsAllowed", width: 70 },
+                    { title: "K", field: "strikeOutsPitching", width: 70 },
+                    { title: "BB", field: "baseOnBallsPitching", width: 70 },
+                    { title: "Pitches", field: "pitchesThrown", width: 90 },
                     { title: "Decision", field: "note", width: 110 },
-                    { title: "Summary", field: "gameLogSummary", minWidth: 280, formatter: "plaintext" }
-                ];
+                    { title: "Summary", field: "gameLogSummary", minWidth: 280 }
+                );
             }
 
-            const columns = [...baseColumns, ...extraColumns];
-
-            // Filter data properly
-            let filtered = gameLogData.filter(row => {
-                if (isBatters) return (row.atBats && parseFloat(row.atBats) > 0);
-                return (row.inningsPitched && parseFloat(row.inningsPitched) > 0) || row.note;
-            });
-
-            // Add opponent/result
-            filtered = filtered.map(row => {
-                const extra = getOpponentAndResult(row);
-                return { ...row, opponent: extra.opponent, result: extra.result };
-            });
+            // Relaxed filter for now (we'll tighten once we confirm data shows)
+            const filteredData = gameLogData
+                .filter(row => {
+                    if (isBatters) return parseFloat(row.atBats || 0) > 0;
+                    return parseFloat(row.inningsPitched || 0) > 0 || row.note;
+                })
+                .map(row => {
+                    const extra = getOpponentAndResult(row);
+                    return { ...row, opponent: extra.opponent, result: extra.result };
+                });
 
             table = new Tabulator("#table-container", {
-                data: filtered,
+                data: filteredData,
                 columns: columns,
                 layout: "fitColumns",
                 pagination: "local",
                 paginationSize: 50,
-                paginationSizeSelector: [25, 50, 100, 250],
                 initialSort: [{ column: "gameDate", dir: "desc" }],
-                rowClick: (e, row) => {
-                    alert(`Row clicked: ${row.getData().fullName} — ${row.getData().gameLogSummary}`);
-                }
+                placeholder: "No data found for this tab",
             });
         }
 
@@ -148,7 +141,7 @@
             currentTab = tab;
             document.getElementById('tab-batters').classList.toggle('tab-active', tab === 0);
             document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 1);
-            if (gameLogData.length > 0) buildTable();
+            buildTable();
         }
 
         window.onload = loadData;
