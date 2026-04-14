@@ -1,43 +1,51 @@
 import csv
 import glob
+import os
+from datetime import date
 
-def merge_all_logs():
-    # Find all daily CSV files
-    csv_files = sorted(glob.glob("mlb_player_game_logs_*.csv"))
+def merge_daily_into_seasonal():
+    seasonal_file = "mlb_2026_season_game_logs.csv"
+    daily_files = glob.glob("mlb_player_game_logs_*.csv")
     
-    if not csv_files:
-        print("No daily CSV files found!")
+    if not daily_files:
+        print("No daily files found to merge.")
         return
-
-    print(f"Found {len(csv_files)} daily files. Merging into one clean seasonal file...")
-
-    all_rows = []
-    headers = None
-
-    for file in csv_files:
-        try:
-            with open(file, 'r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                if headers is None:
-                    headers = reader.fieldnames
-                for row in reader:
-                    all_rows.append(row)
-        except Exception as e:
-            print(f"Warning: Could not read {file}: {e}")
-
-    if not all_rows:
-        print("No data rows found to merge.")
+    
+    # Get the most recent daily file
+    latest_daily = max(daily_files, key=os.path.getctime)
+    print(f"Merging latest daily file: {latest_daily}")
+    
+    # Read all existing rows from seasonal file to avoid duplicates
+    existing_game_pks = set()
+    if os.path.exists(seasonal_file):
+        with open(seasonal_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                existing_game_pks.add(row.get('gamePk'))
+    
+    # Read the daily file and append only new rows
+    new_rows = []
+    with open(latest_daily, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        
+        for row in reader:
+            if row.get('gamePk') not in existing_game_pks:
+                new_rows.append(row)
+    
+    if not new_rows:
+        print("No new rows to append.")
         return
-
-    # Write/overwrite the big seasonal file cleanly
-    output_file = "mlb_2026_season_game_logs.csv"
-    with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=headers)
-        writer.writeheader()
-        writer.writerows(all_rows)
-
-    print(f"✅ Successfully merged {len(all_rows)} player game logs into {output_file}")
-    print(f"Total rows in seasonal file: {len(all_rows)}")
+    
+    # Append to seasonal file
+    mode = 'a' if os.path.exists(seasonal_file) else 'w'
+    with open(seasonal_file, mode, newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if mode == 'w':
+            writer.writeheader()
+        writer.writerows(new_rows)
+    
+    print(f"✅ Successfully appended {len(new_rows)} new rows from {latest_daily} to {seasonal_file}")
 
 if __name__ == "__main__":
-    merge_all_logs()
+    merge_daily_into_seasonal()
