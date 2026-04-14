@@ -2,6 +2,7 @@ import requests
 import csv
 from datetime import date, timedelta
 import time
+import os
 
 def get_schedule(date_str):
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}&gameType=R&hydrate=team,linescore,decisions,person,stats"
@@ -83,15 +84,21 @@ def main():
         except Exception as e:
             print(f"⚠️ Error on game {game_pk}: {e}")
 
-    if all_rows:
-        filename = f"mlb_player_game_logs_{yesterday}.csv"
-        with open(filename, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(all_rows)
-        print(f"✅ Saved {len(all_rows)} rows to {filename}")
-    else:
+    if not all_rows:
         print("No completed games found for yesterday.")
+        return
+
+    filename = "mlb_2026_season_game_logs.csv"
+    file_exists = os.path.exists(filename)
+
+    mode = "a" if file_exists else "w"
+    with open(filename, mode, newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(all_rows)
+
+    print(f"✅ Appended {len(all_rows)} new rows to {filename}")
 
 if __name__ == "__main__":
     main()
