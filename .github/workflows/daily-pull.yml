@@ -2,7 +2,7 @@ name: Daily MLB Player Game Logs
 
 on:
   schedule:
-    - cron: '0 4 * * *'      # Runs every day at 4 AM UTC (~11 PM CDT)
+    - cron: '0 4 * * *'   # Runs at 4 AM UTC (~11 PM CDT)
   workflow_dispatch:
 
 jobs:
@@ -15,29 +15,21 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - run: pip install requests
 
-      - name: Run MLB pull script
+      - name: Run Daily Append
         run: python main.py
 
-      - name: Merge all daily logs into one seasonal file
-        run: python merge_logs.py
-
-      - name: Commit and push new files
+      - name: Commit and push new data
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add *.csv || true
-          git commit -m "Daily MLB update + merged seasonal file - $(date)" || echo "No changes to commit"
+          git add mlb_2026_season_game_logs.csv || true
+          git commit -m "Daily MLB game logs append - $(date)" || echo "No new data"
           git push || true
