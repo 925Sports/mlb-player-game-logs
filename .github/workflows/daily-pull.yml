@@ -1,9 +1,13 @@
 name: Daily MLB Player Game Logs
 
+# Give the workflow permission to read and write to the repo
+permissions:
+  contents: write
+
 on:
   schedule:
-    - cron: '0 5 * * *'   # Runs every day at 5 AM UTC (midnight CDT)
-  workflow_dispatch:      # Allows manual run
+    - cron: '0 5 * * *'
+  workflow_dispatch:
 
 jobs:
   daily-pull:
@@ -28,6 +32,6 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add "*.csv"                  # ← This line now catches BOTH daily + seasonal files
+          git add "*.csv"
           git commit -m "Daily MLB game logs update - $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git push
