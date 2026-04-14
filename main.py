@@ -10,8 +10,7 @@ def get_schedule(target_date):
     if response.status_code != 200:
         print(f"❌ Schedule failed: {response.status_code}")
         return []
-    data = response.json()
-    return data.get("dates", [])
+    return response.json().get("dates", [])
 
 def get_boxscore(game_pk):
     url = f"https://statsapi.mlb.com/api/v1/game/{game_pk}/boxscore?hydrate=person"
@@ -24,7 +23,6 @@ def extract_player_rows(game, box_data, game_date):
     if not box_data or not game:
         return rows
 
-    # Full game metadata (exact columns from your original seasonal file)
     game_info = {
         "gameDate": game_date,
         "gamePk": game.get("gamePk"),
@@ -58,18 +56,16 @@ def extract_player_rows(game, box_data, game_date):
         "away_isWinner": game.get("teams", {}).get("away", {}).get("isWinner"),
     }
 
-    # Player rows (add game metadata to every player)
     teams = box_data.get("teams", {})
     for side in ["home", "away"]:
         team_data = teams.get(side, {})
-        players = team_data.get("players", {})
-        for player_key, player in players.items():
+        for player_key, player in team_data.get("players", {}).items():
             person = player.get("person", {})
             stats = player.get("stats", {})
             batting = stats.get("batting", {})
             pitching = stats.get("pitching", {})
 
-            row = game_info.copy()  # Start with full game metadata
+            row = game_info.copy()
             row.update({
                 "playerId": person.get("id"),
                 "fullName": person.get("fullName"),
@@ -88,7 +84,6 @@ def extract_player_rows(game, box_data, game_date):
                 "pitchHand_description": person.get("pitchHand", {}).get("description"),
                 "gameLogSummary": batting.get("summary") or pitching.get("summary") or "",
                 "note": player.get("note", ""),
-                # Batting
                 "atBats": batting.get("atBats"),
                 "hits": batting.get("hits"),
                 "doubles": batting.get("doubles"),
@@ -103,7 +98,6 @@ def extract_player_rows(game, box_data, game_date):
                 "groundIntoDoublePlay": batting.get("groundIntoDoublePlay"),
                 "plateAppearances": batting.get("plateAppearances"),
                 "totalBases": batting.get("totalBases"),
-                # Pitching
                 "inningsPitched": pitching.get("inningsPitched"),
                 "earnedRuns": pitching.get("earnedRuns"),
                 "hitsAllowed": pitching.get("hits"),
