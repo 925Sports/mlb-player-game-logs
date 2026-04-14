@@ -10,12 +10,14 @@
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; }
         .tab-active { border-bottom: 3px solid #1e40af; font-weight: 600; }
+        .modal { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
         <h1 class="text-4xl font-bold mb-2">MLB 2026 Player Game Logs</h1>
-        <div id="debug-info" class="text-sm text-emerald-400 mb-6"></div>
+        <div id="last-updated" class="text-sm text-zinc-400 mb-6"></div>
 
         <div class="flex border-b border-zinc-700 mb-6">
             <button onclick="switchTab(0)" id="tab-batters" class="tab px-8 py-4 text-lg tab-active">Batters</button>
@@ -25,53 +27,68 @@
         <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"></div>
     </div>
 
+    <!-- Per-Inning Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 modal">
+        <div class="bg-zinc-900 rounded-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
+                <h2 id="modal-title" class="text-2xl font-semibold"></h2>
+                <button onclick="closeModal()" class="text-zinc-400 hover:text-white text-3xl leading-none">×</button>
+            </div>
+            <div class="p-6 overflow-auto max-h-[70vh]" id="modal-content"></div>
+        </div>
+    </div>
+
     <script>
         let gameLogData = [];
+        let perInningData = [];
         let currentTab = 0;
         let table = null;
 
-        const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
+        const GAME_LOG_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
+        const PER_INNING_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv";
 
         async function loadData() {
-            const debugEl = document.getElementById('debug-info');
-            debugEl.textContent = '🔄 Loading CSV...';
-
             try {
-                const response = await fetch(CSV_URL + '?t=' + Date.now());
-                const text = await response.text();
-                const rows = text.trim().split('\n');
-                const headers = rows[0].split(',').map(h => h.replace(/"/g, '').trim());
+                const [gameRes, inningRes] = await Promise.all([
+                    fetch(GAME_LOG_URL + '?t=' + Date.now()),
+                    fetch(PER_INNING_URL + '?t=' + Date.now())
+                ]);
 
-                gameLogData = rows.slice(1).map(row => {
+                const gameText = await gameRes.text();
+                const inningText = await inningRes.text();
+
+                // Parse game logs
+                const gameRows = gameText.trim().split('\n');
+                const gameHeaders = gameRows[0].split(',').map(h => h.replace(/"/g, '').trim());
+                gameLogData = gameRows.slice(1).map(row => {
                     const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
                     const obj = {};
-                    headers.forEach((h, i) => {
-                        obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '';
-                    });
+                    gameHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
                     return obj;
                 });
 
-                const total = gameLogData.length;
-                const battersCount = gameLogData.filter(r => parseFloat(r.atBats || 0) > 0).length;
-                const pitchersCount = gameLogData.filter(r => parseFloat(r.inningsPitched || 0) > 0 || r.note).length;
+                // Parse per-inning data
+                const inningRows = inningText.trim().split('\n');
+                const inningHeaders = inningRows[0].split(',').map(h => h.replace(/"/g, '').trim());
+                perInningData = inningRows.slice(1).map(row => {
+                    const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                    const obj = {};
+                    inningHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
+                    return obj;
+                });
 
-                debugEl.innerHTML = `
-                    ✅ Loaded <strong>${total.toLocaleString()}</strong> rows<br>
-                    • Batters with AB > 0: <strong>${battersCount}</strong><br>
-                    • Pitchers with IP or Decision: <strong>${pitchersCount}</strong>
-                `;
-
+                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
                 buildTable();
             } catch (err) {
-                debugEl.innerHTML = `❌ Failed to load: ${err.message}`;
+                console.error("Load error:", err);
             }
         }
 
         function getOpponentAndResult(row) {
             const isHome = row.home_team_abbreviation === row.teamAbbrev;
-            const opponentAbbr = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
-            const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score || 0}-${row.away_score || 0}`;
-            return { opponent: `vs ${opponentAbbr}`, result };
+            const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
+            const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
+            return { opponent: `vs ${opponent}`, result };
         }
 
         function buildTable() {
@@ -98,7 +115,7 @@
                     { title: "R", field: "runs", width: 70 },
                     { title: "K", field: "strikeOuts", width: 70 },
                     { title: "BB", field: "baseOnBalls", width: 70 },
-                    { title: "Summary", field: "gameLogSummary", minWidth: 300 }
+                    { title: "Summary", field: "gameLogSummary", minWidth: 280 }
                 );
             } else {
                 columns.push(
@@ -110,18 +127,14 @@
                     { title: "BB", field: "baseOnBallsPitching", width: 70 },
                     { title: "Pitches", field: "pitchesThrown", width: 90 },
                     { title: "Decision", field: "note", width: 110 },
-                    { title: "Summary", field: "gameLogSummary", minWidth: 300 }
+                    { title: "Summary", field: "gameLogSummary", minWidth: 280 }
                 );
             }
 
-            // More relaxed filter to ensure data shows
             const filteredData = gameLogData
                 .filter(row => {
-                    if (isBatters) {
-                        return parseFloat(row.atBats || 0) > 0 || row.primaryPosition_name?.includes("Base") || row.primaryPosition_name?.includes("Outfield");
-                    } else {
-                        return parseFloat(row.inningsPitched || 0) > 0 || row.note || row.primaryPosition_name === "Pitcher";
-                    }
+                    if (isBatters) return parseFloat(row.atBats || 0) > 0;
+                    return parseFloat(row.inningsPitched || 0) > 0 || row.note;
                 })
                 .map(row => {
                     const extra = getOpponentAndResult(row);
@@ -134,9 +147,52 @@
                 layout: "fitColumns",
                 pagination: "local",
                 paginationSize: 50,
+                paginationSizeSelector: [25, 50, 100, 250],
                 initialSort: [{ column: "gameDate", dir: "desc" }],
-                placeholder: "No matching records found",
+                rowClick: function(e, row) {
+                    showPerInningModal(row.getData());
+                }
             });
+        }
+
+        function showPerInningModal(rowData) {
+            const modal = document.getElementById('modal');
+            const title = document.getElementById('modal-title');
+            const content = document.getElementById('modal-content');
+
+            title.textContent = `${rowData.fullName} - ${rowData.gameDate} vs ${rowData.opponent.replace('vs ', '')}`;
+
+            // Filter per-inning data for this player + game
+            const details = perInningData.filter(p => 
+                p.gamePk === rowData.gamePk && 
+                (currentTab === 0 ? p.batterId === rowData.playerId : p.pitcherId === rowData.playerId)
+            );
+
+            let html = `<table class="w-full text-sm"><thead class="bg-zinc-800"><tr>`;
+            html += `<th class="p-3 text-left">Inning</th><th class="p-3 text-left">Result</th><th class="p-3 text-left">Description</th><th class="p-3 text-left">Pitches</th><th class="p-3 text-left">RBI</th><th class="p-3 text-left">Runs</th></tr></thead><tbody>`;
+
+            if (details.length === 0) {
+                html += `<tr><td colspan="6" class="p-6 text-center text-zinc-400">No per-inning details available for this game.</td></tr>`;
+            } else {
+                details.forEach(d => {
+                    html += `<tr class="border-t border-zinc-700">
+                        <td class="p-3">${d.inning || ''}</td>
+                        <td class="p-3">${d.atBatResult || ''}</td>
+                        <td class="p-3">${d.description || ''}</td>
+                        <td class="p-3">${d.pitchesInAB || ''}</td>
+                        <td class="p-3">${d.rbi || ''}</td>
+                        <td class="p-3">${d.runs || ''}</td>
+                    </tr>`;
+                });
+            }
+            html += `</tbody></table>`;
+
+            content.innerHTML = html;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
         }
 
         function switchTab(tab) {
