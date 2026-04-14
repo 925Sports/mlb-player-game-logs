@@ -18,29 +18,29 @@
       <button onclick="switchTab(1)" id="tab1" class="px-8 py-3 text-lg font-medium">Pitchers</button>
     </div>
 
-    <div id="status" class="mb-6 text-lg text-emerald-400"></div>
+    <div id="status" class="mb-6 text-lg"></div>
     <div id="table-container" class="bg-zinc-900 rounded-2xl"></div>
   </div>
 
-  <!-- Tabulator only (no PapaParse) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
 
   <script>
     let gameData = [];
     let perInningData = [];
-    let table = null;
+    let currentTable = null;
     let currentTab = 0;
 
-    // Simple native CSV parser (no external library)
-    function parseCSV(text) {
+    // Simple native CSV parser (no PapaParse)
+    function simpleCSVParse(text) {
       const lines = text.trim().split('\n');
       const headers = lines[0].split(',');
       const result = [];
       for (let i = 1; i < lines.length; i++) {
-        const row = {};
+        if (!lines[i].trim()) continue;
         const values = lines[i].split(',');
+        const row = {};
         for (let j = 0; j < headers.length; j++) {
-          row[headers[j]] = values[j] || '';
+          row[headers[j]] = values[j] !== undefined ? values[j] : '';
         }
         result.push(row);
       }
@@ -49,7 +49,7 @@
 
     async function loadData() {
       const status = document.getElementById("status");
-      status.textContent = "🔄 Loading data... (this may take 10-15 seconds)";
+      status.innerHTML = "🔄 Loading CSVs... (this may take 10-20 seconds)";
 
       try {
         const [gameRes, perRes] = await Promise.all([
@@ -60,13 +60,14 @@
         const gameText = await gameRes.text();
         const perText = await perRes.text();
 
-        gameData = parseCSV(gameText);
-        perInningData = parseCSV(perText);
+        gameData = simpleCSVParse(gameText);
+        perInningData = simpleCSVParse(perText);
 
         status.innerHTML = `✅ Loaded <span class="text-emerald-400">${gameData.length}</span> rows`;
         buildTable();
       } catch (err) {
-        status.innerHTML = `❌ Failed to load CSV: ${err.message}`;
+        status.innerHTML = `❌ Failed to load: ${err.message}`;
+        console.error(err);
       }
     }
 
@@ -78,7 +79,7 @@
     }
 
     function buildTable() {
-      if (table) table.destroy();
+      if (currentTable) currentTable.destroy();
 
       const columns = currentTab === 0 ? [
         {title: "Date", field: "gameDate", width: 110},
@@ -105,20 +106,20 @@
 
       const filtered = gameData.filter(row => currentTab === 0 ? row.atBats != null : row.inningsPitched != null);
 
-      table = new Tabulator("#table-container", {
+      currentTable = new Tabulator("#table-container", {
         data: filtered,
         columns: columns,
         layout: "fitColumns",
         pagination: "local",
         paginationSize: 25,
         initialSort: [{column: "gameDate", dir: "desc"}],
-        rowClick: function(e, row) { togglePerInningDropdown(row); }
+        rowClick: function(e, row) { togglePerInning(row); }
       });
     }
 
-    function togglePerInningDropdown(row) {
+    function togglePerInning(row) {
       const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains('detail-row')) {
+      if (existing && existing.classList.contains("detail-row")) {
         existing.remove();
         return;
       }
@@ -132,7 +133,7 @@
       );
 
       if (details.length === 0) {
-        alert("No per-inning data for this player/game.");
+        alert("No per-inning data for this player/game yet.");
         return;
       }
 
@@ -163,7 +164,6 @@
       row.getElement().after(newRow);
     }
 
-    // Start the app
     window.onload = loadData;
   </script>
 </body>
