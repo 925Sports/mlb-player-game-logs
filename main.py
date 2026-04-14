@@ -200,12 +200,15 @@
             const title = document.getElementById('modal-title');
             const content = document.getElementById('modal-content');
 
-            title.textContent = `${rowData.fullName} — ${rowData.gameDate} ${rowData.opponent}`;
+            title.textContent = `${rowData.fullName} — ${rowData.gameDate} ${rowData.opponent || ''}`;
 
+            // Try multiple possible ID field names
             const details = perInningData.filter(p => 
-                String(p.gamePk) === String(rowData.gamePk) && 
-                (currentTab === 0 ? String(p.batterId || p.batter_id) === String(rowData.playerId) : 
-                                   String(p.pitcherId || p.pitcher_id) === String(rowData.playerId))
+                String(p.gamePk || p.game_pk) === String(rowData.gamePk) && 
+                (currentTab === 0 
+                    ? (String(p.batterId || p.batter_id || p.batterID) === String(rowData.playerId))
+                    : (String(p.pitcherId || p.pitcher_id || p.pitcherID) === String(rowData.playerId))
+                )
             );
 
             let html = `<table class="w-full text-sm border-collapse"><thead class="bg-zinc-800 sticky top-0"><tr>
@@ -218,14 +221,14 @@
             </tr></thead><tbody>`;
 
             if (details.length === 0) {
-                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">No per-inning details found for this player in this game.</td></tr>`;
+                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">No per-inning details found.<br>gamePk: ${rowData.gamePk} | playerId: ${rowData.playerId}</td></tr>`;
             } else {
                 details.forEach(d => {
                     html += `<tr class="border-t border-zinc-700 hover:bg-zinc-800">
                         <td class="p-3">${d.inning || ''}</td>
                         <td class="p-3">${d.atBatResult || d.result || ''}</td>
                         <td class="p-3">${d.description || ''}</td>
-                        <td class="p-3">${d.pitchesInAB || ''}</td>
+                        <td class="p-3">${d.pitchesInAB || d.pitches || ''}</td>
                         <td class="p-3">${d.rbi || '0'}</td>
                         <td class="p-3">${d.runs || '0'}</td>
                     </tr>`;
