@@ -4,7 +4,7 @@ from datetime import date
 import time
 
 def get_schedule(date_str):
-    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}&gameType=R&hydrate=team,linescore,decisions,person,stats"
+    url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date_str}&gameType=R"
     r = requests.get(url)
     r.raise_for_status()
     return r.json()
@@ -20,7 +20,7 @@ def extract_player_rows(game_pk, box_data, game_date):
     for side in ["home", "away"]:
         team_data = box_data.get("teams", {}).get(side, {})
         team_abbr = team_data.get("team", {}).get("abbreviation", "")
-        
+
         for player_key, player in team_data.get("players", {}).items():
             person = player.get("person", {})
             batting = player.get("stats", {}).get("batting", [{}])[0] if player.get("stats", {}).get("batting") else {}
@@ -54,14 +54,14 @@ def extract_player_rows(game_pk, box_data, game_date):
                 "strikeOutsPitching": pitching.get("strikeOuts"),
                 "baseOnBallsPitching": pitching.get("baseOnBalls"),
                 "pitchesThrown": pitching.get("pitchesThrown"),
-                "note": player.get("note"),   # Decision (W, L, SV, etc.)
+                "note": player.get("note"),  # Decision (W, L, SV, etc.)
             }
             rows.append(row)
     return rows
 
 def main():
     today = date.today().strftime("%Y-%m-%d")
-    print(f"🚀 Pulling detailed data for {today}")
+    print(f"🚀 Pulling detailed boxscore data for {today}")
 
     schedule = get_schedule(today)
     games = schedule.get("dates", [{}])[0].get("games", [])
