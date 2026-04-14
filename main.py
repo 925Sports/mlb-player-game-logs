@@ -60,7 +60,7 @@ def extract_player_rows(game_pk, box_data, game_date):
     return rows
 
 def main():
-    # Pull YESTERDAY's games (guaranteed Final)
+    # Pull YESTERDAY's games so they are guaranteed Final
     yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
     print(f"🚀 Pulling detailed boxscore data for YESTERDAY: {yesterday}")
 
