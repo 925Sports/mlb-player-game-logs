@@ -4,146 +4,191 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MLB 2026 Player Game Logs</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.1/js/tabulator.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.1/css/tabulator.min.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.0/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.2.0/js/tabulator.min.js"></script>
     <style>
-        body { font-family: system-ui, sans-serif; }
+        body { font-family: system-ui, -apple-system, sans-serif; }
         .tab-active { border-bottom: 3px solid #1e40af; font-weight: 600; }
+        .modal { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 p-4 md:p-8">
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-6">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold tracking-tight">MLB 2026 Player Game Logs</h1>
+            <div id="last-updated" class="text-sm text-zinc-400"></div>
+        </div>
 
-<div class="max-w-7xl mx-auto">
-    <h1 class="text-3xl font-bold mb-6 text-center">MLB 2026 Player Game Logs</h1>
-    
-    <div class="flex border-b border-gray-700 mb-6">
-        <button onclick="switchTab(0)" id="tab-batters" class="tab-active px-8 py-3 text-lg">Batters</button>
-        <button onclick="switchTab(1)" id="tab-pitchers" class="px-8 py-3 text-lg">Pitchers</button>
+        <!-- Tabs -->
+        <div class="flex border-b border-zinc-700 mb-6">
+            <button onclick="switchTab(0)" id="tab-batters" class="tab px-8 py-4 text-lg tab-active">Batters</button>
+            <button onclick="switchTab(1)" id="tab-pitchers" class="tab px-8 py-4 text-lg">Pitchers</button>
+        </div>
+
+        <!-- Status -->
+        <div id="status" class="mb-4 text-sm text-emerald-400"></div>
+
+        <!-- Table Container -->
+        <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"></div>
     </div>
 
-    <div id="status" class="mb-4 text-sm text-gray-400"></div>
-    <div id="table-container"></div>
-</div>
+    <!-- Per-Inning Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 modal">
+        <div class="bg-zinc-900 rounded-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
+                <h2 id="modal-title" class="text-2xl font-semibold"></h2>
+                <button onclick="closeModal()" class="text-zinc-400 hover:text-white text-3xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-auto max-h-[70vh]" id="modal-content"></div>
+        </div>
+    </div>
 
-<script>
-// === CONFIG ===
-const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
+    <script>
+        let gameLogData = [];
+        let currentTab = 0; // 0 = Batters, 1 = Pitchers
+        let table = null;
 
-// Global variables
-let allData = [];
-let currentTab = 0; // 0 = Batters, 1 = Pitchers
-let table = null;
+        const CSV_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
 
-// Switch between tabs
-function switchTab(tab) {
-    currentTab = tab;
-    document.getElementById('tab-batters').classList.toggle('tab-active', tab === 0);
-    document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 1);
-    buildTable();
-}
+        async function loadData() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = '🔄 Loading data...';
+            
+            try {
+                const response = await fetch(CSV_URL + '?t=' + Date.now());
+                const text = await response.text();
+                
+                // Simple CSV parser (handles quotes)
+                const rows = text.trim().split('\n');
+                const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                
+                gameLogData = rows.slice(1).map(row => {
+                    const values = [];
+                    let inQuote = false;
+                    let current = '';
+                    for (let char of row + ',') {
+                        if (char === '"' && !inQuote) { inQuote = true; continue; }
+                        if (char === '"' && inQuote) { inQuote = false; continue; }
+                        if (char === ',' && !inQuote) {
+                            values.push(current.trim());
+                            current = '';
+                        } else {
+                            current += char;
+                        }
+                    }
+                    const obj = {};
+                    headers.forEach((h, i) => obj[h] = values[i] || '');
+                    return obj;
+                });
 
-// Build the Tabulator table with correct filtering
-function buildTable() {
-    const container = document.getElementById('table-container');
-    container.innerHTML = '';
-
-    // Filter data
-    let filteredData = allData.filter(row => {
-        const pos = (row.primaryPosition_name || "").toLowerCase();
-        const isPitcher = pos.includes("pitcher") || 
-                         (row.inningsPitched && row.inningsPitched.toString().trim() !== "" && row.inningsPitched !== "0");
-        
-        if (currentTab === 0) { // Batters tab
-            return !isPitcher && (row.atBats || row.atBats === 0);
-        } else { // Pitchers tab
-            return isPitcher;
+                statusEl.innerHTML = `✅ Loaded <strong>${gameLogData.length.toLocaleString()}</strong> player game logs`;
+                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+                
+                buildTable();
+            } catch (err) {
+                statusEl.innerHTML = `❌ Failed to load CSV: ${err.message}`;
+                console.error(err);
+            }
         }
-    });
 
-    // Define columns - different for each tab
-    let columns = [
-        { title: "Date", field: "gameDate", width: 110, sorter: "date", sorterParams: {format: "yyyy-MM-dd"} },
-        { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
-        { title: "Team", field: "teamAbbrev", width: 80 },
-        { title: "Position", field: "primaryPosition_name", width: 120 }
-    ];
+        function getOpponentAndResult(row) {
+            const isHome = row.home_team_abbreviation === row.teamAbbrev;
+            const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
+            const homeScore = parseInt(row.home_score) || 0;
+            const awayScore = parseInt(row.away_score) || 0;
+            const myScore = isHome ? homeScore : awayScore;
+            const oppScore = isHome ? awayScore : homeScore;
+            const won = (isHome && row.home_isWinner === "True") || (!isHome && row.away_isWinner === "True");
+            const result = won ? `W ${myScore}-${oppScore}` : `L ${myScore}-${oppScore}`;
+            return { opponent: `vs ${opponent}`, result, isHome: isHome ? "Home" : "Away" };
+        }
 
-    if (currentTab === 0) { // Batters columns
-        columns = columns.concat([
-            { title: "AB", field: "atBats", width: 70 },
-            { title: "H", field: "hits", width: 70 },
-            { title: "HR", field: "homeRuns", width: 70 },
-            { title: "RBI", field: "rbi", width: 70 },
-            { title: "R", field: "runs", width: 70 },
-            { title: "K", field: "strikeOuts", width: 70 },
-            { title: "BB", field: "baseOnBalls", width: 70 },
-            { title: "SB", field: "stolenBases", width: 70 },
-            { title: "Summary", field: "gameLogSummary", minWidth: 250, formatter: "plaintext" }
-        ]);
-    } else { // Pitchers columns
-        columns = columns.concat([
-            { title: "IP", field: "inningsPitched", width: 80 },
-            { title: "ER", field: "earnedRuns", width: 70 },
-            { title: "H", field: "hitsAllowed", width: 70 },
-            { title: "HR", field: "homeRunsAllowed", width: 70 },
-            { title: "K", field: "strikeOutsPitching", width: 70 },
-            { title: "BB", field: "baseOnBallsPitching", width: 70 },
-            { title: "Pitches", field: "pitchesThrown", width: 90 },
-            { title: "Decision", field: "note", width: 100 },
-            { title: "Summary", field: "gameLogSummary", minWidth: 250, formatter: "plaintext" }
-        ]);
-    }
+        function buildTable() {
+            const container = document.getElementById('table-container');
+            container.innerHTML = '';
 
-    table = new Tabulator("#table-container", {
-        data: filteredData,
-        columns: columns,
-        layout: "fitColumns",
-        pagination: "local",
-        paginationSize: 50,
-        paginationSizeSelector: [25, 50, 100, 250],
-        initialSort: [{column: "gameDate", dir: "desc"}],
-        headerFilterLiveFilterDelay: 300,
-        responsiveLayout: "collapse",
-    });
-}
+            const isBatters = currentTab === 0;
 
-// Load CSV and initialize
-async function init() {
-    const statusEl = document.getElementById('status');
-    statusEl.textContent = "🔄 Loading latest data...";
+            const columns = [
+                { title: "Date", field: "gameDate", width: 110, sorter: "date", headerFilter: "input" },
+                { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
+                { title: "Team", field: "teamAbbrev", width: 80 },
+                { title: "Opponent", field: "opponent", width: 100 },
+                { title: "Result", field: "result", width: 100 },
+                { title: "Pos", field: "primaryPosition_name", width: 90 },
+            ];
 
-    try {
-        const response = await fetch(CSV_URL + "?t=" + Date.now());
-        const text = await response.text();
-        
-        // Simple CSV parser (no PapaParse dependency)
-        const lines = text.trim().split('\n');
-        const headers = lines[0].split(',');
-        allData = [];
-        
-        for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-            const row = {};
-            headers.forEach((header, index) => {
-                row[header.trim()] = values[index] ? values[index].replace(/^"|"$/g, '').trim() : '';
+            if (isBatters) {
+                columns.push(
+                    { title: "AB", field: "atBats", width: 70, sorter: "number" },
+                    { title: "H", field: "hits", width: 70, sorter: "number" },
+                    { title: "HR", field: "homeRuns", width: 70, sorter: "number" },
+                    { title: "RBI", field: "rbi", width: 70, sorter: "number" },
+                    { title: "R", field: "runs", width: 70, sorter: "number" },
+                    { title: "K", field: "strikeOuts", width: 70, sorter: "number" },
+                    { title: "BB", field: "baseOnBalls", width: 70, sorter: "number" },
+                    { title: "Summary", field: "gameLogSummary", minWidth: 250, formatter: "plaintext" }
+                );
+            } else {
+                columns.push(
+                    { title: "IP", field: "inningsPitched", width: 80, sorter: "number" },
+                    { title: "ER", field: "earnedRuns", width: 70, sorter: "number" },
+                    { title: "H", field: "hitsAllowed", width: 70, sorter: "number" },
+                    { title: "HR", field: "homeRunsAllowed", width: 70, sorter: "number" },
+                    { title: "K", field: "strikeOutsPitching", width: 70, sorter: "number" },
+                    { title: "BB", field: "baseOnBallsPitching", width: 70, sorter: "number" },
+                    { title: "Pitches", field: "pitchesThrown", width: 90, sorter: "number" },
+                    { title: "Decision", field: "note", width: 100 },
+                    { title: "Summary", field: "gameLogSummary", minWidth: 250, formatter: "plaintext" }
+                );
+            }
+
+            // Filter data
+            const filteredData = gameLogData.filter(row => {
+                if (isBatters) return parseFloat(row.atBats || 0) > 0;
+                return parseFloat(row.inningsPitched || 0) > 0 || row.note;
+            }).map(row => {
+                const extra = getOpponentAndResult(row);
+                return { ...row, opponent: extra.opponent, result: extra.result };
             });
-            allData.push(row);
+
+            table = new Tabulator("#table-container", {
+                data: filteredData,
+                columns: columns,
+                layout: "fitColumns",
+                pagination: "local",
+                paginationSize: 50,
+                paginationSizeSelector: [25, 50, 100, 250],
+                initialSort: [{ column: "gameDate", dir: "desc" }],
+                rowClick: function(e, row) {
+                    showPerInningModal(row.getData());
+                },
+                placeholder: "No matching records",
+            });
         }
 
-        statusEl.innerHTML = `✅ Loaded <strong>${allData.length}</strong> player game logs`;
-        buildTable(); // Build initial Batters tab
-        
-    } catch (err) {
-        console.error(err);
-        statusEl.innerHTML = `❌ Failed to load data: ${err.message}`;
-    }
-}
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('tab-batters').classList.toggle('tab-active', tab === 0);
+            document.getElementById('tab-pitchers').classList.toggle('tab-active', tab === 1);
+            buildTable();
+        }
 
-// Start when page loads
-window.onload = init;
-</script>
+        function showPerInningModal(rowData) {
+            // Placeholder for per-inning modal (you can expand this later with the per-inning CSV)
+            alert(`Clicked on ${rowData.fullName} - ${rowData.gameLogSummary}\n\n(Per-inning details coming soon)`);
+        }
 
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        // Initialize
+        window.onload = () => {
+            loadData();
+        };
+    </script>
 </body>
 </html>
