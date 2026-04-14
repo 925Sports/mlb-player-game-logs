@@ -30,7 +30,6 @@
     let currentTable = null;
     let currentTab = 0;
 
-    // Simple native CSV parser (no PapaParse)
     function simpleCSVParse(text) {
       const lines = text.trim().split('\n');
       const headers = lines[0].split(',');
@@ -40,7 +39,10 @@
         const values = lines[i].split(',');
         const row = {};
         for (let j = 0; j < headers.length; j++) {
-          row[headers[j]] = values[j] !== undefined ? values[j] : '';
+          let key = headers[j].trim();
+          let value = values[j] !== undefined ? values[j].trim() : '';
+          if (!isNaN(value) && value !== '') value = Number(value);
+          row[key] = value;
         }
         result.push(row);
       }
@@ -49,25 +51,21 @@
 
     async function loadData() {
       const status = document.getElementById("status");
-      status.innerHTML = "🔄 Loading CSVs... (this may take 10-20 seconds)";
+      status.innerHTML = "🔄 Loading CSVs...";
 
       try {
         const [gameRes, perRes] = await Promise.all([
-          fetch("https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv"),
-          fetch("https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv")
+          fetch("https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv?" + Date.now()),
+          fetch("https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv?" + Date.now())
         ]);
 
-        const gameText = await gameRes.text();
-        const perText = await perRes.text();
+        gameData = simpleCSVParse(await gameRes.text());
+        perInningData = simpleCSVParse(await perRes.text());
 
-        gameData = simpleCSVParse(gameText);
-        perInningData = simpleCSVParse(perText);
-
-        status.innerHTML = `✅ Loaded <span class="text-emerald-400">${gameData.length}</span> rows`;
+        status.innerHTML = `✅ Loaded <span class="text-emerald-400">${gameData.length}</span> rows • Latest: ${gameData[0]?.gameDate || 'N/A'}`;
         buildTable();
       } catch (err) {
-        status.innerHTML = `❌ Failed to load: ${err.message}`;
-        console.error(err);
+        status.innerHTML = `❌ Failed: ${err.message}`;
       }
     }
 
@@ -82,7 +80,7 @@
       if (currentTable) currentTable.destroy();
 
       const columns = currentTab === 0 ? [
-        {title: "Date", field: "gameDate", width: 110},
+        {title: "Date", field: "gameDate", width: 110, sorter:"date"},
         {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
         {title: "Team", field: "home_team_abbreviation", width: 80},
         {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
@@ -93,7 +91,7 @@
         {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
         {title: "Summary", field: "gameLogSummary", minWidth: 300}
       ] : [
-        {title: "Date", field: "gameDate", width: 110},
+        {title: "Date", field: "gameDate", width: 110, sorter:"date"},
         {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
         {title: "Team", field: "home_team_abbreviation", width: 80},
         {title: "IP", field: "inningsPitched", width: 70, hozAlign: "center"},
@@ -133,7 +131,7 @@
       );
 
       if (details.length === 0) {
-        alert("No per-inning data for this player/game yet.");
+        alert("No per-inning data for this player/game.");
         return;
       }
 
