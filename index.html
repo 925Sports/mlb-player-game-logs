@@ -3,174 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MLB 2026 Player Game Logs</title>
-  
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.1/papaparse.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js" defer></script>
-  <script src="https://cdn.tailwindcss.com" defer></script>
+  <title>MLB 2026 Player Game Logs - DEBUG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen">
-  <div class="max-w-7xl mx-auto p-6">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-        MLB 2026 Player Game Logs
-      </h1>
-      <div id="status" class="text-sm font-medium text-emerald-400"></div>
-    </div>
+<body class="bg-zinc-950 text-zinc-100 p-8 font-mono">
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-6">MLB Game Log Tool — DEBUG MODE</h1>
+    
+    <button onclick="loadData()" 
+            class="bg-cyan-500 hover:bg-cyan-600 px-6 py-3 rounded-lg text-black font-semibold mb-6">
+      🔄 Reload Data
+    </button>
 
-    <div class="flex gap-4 border-b border-zinc-700 mb-6">
-      <button onclick="switchTab(0)" id="tab-batters" class="tab-active px-6 py-3 text-lg font-medium">Batters</button>
-      <button onclick="switchTab(1)" id="tab-pitchers" class="px-6 py-3 text-lg font-medium">Pitchers</button>
-    </div>
-
-    <div id="debug" class="mb-4 text-xs bg-zinc-900 p-3 rounded-lg"></div>
-    <div id="table-container" class="bg-zinc-900 rounded-xl shadow-xl overflow-hidden"></div>
+    <div id="status" class="text-lg mb-4"></div>
+    <div id="error-details" class="bg-red-950 border border-red-500 p-4 rounded-lg text-red-300 text-sm"></div>
   </div>
 
   <script>
-    let gameLogData = [];
-    let perInningData = [];
-    let table;
-    let currentTab = 0;
-
-    const CSV_GAME_LOG = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
-    const CSV_PER_INNING = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv";
-
     async function loadData() {
-      const statusEl = document.getElementById("status");
-      statusEl.textContent = "🔄 Loading CSVs...";
+      const status = document.getElementById("status");
+      const details = document.getElementById("error-details");
+      status.textContent = "🔄 Fetching CSV...";
+      details.innerHTML = "";
+
+      const url = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv?" + Date.now();
 
       try {
-        const [gameRes, perRes] = await Promise.all([fetch(CSV_GAME_LOG), fetch(CSV_PER_INNING)]);
+        const res = await fetch(url);
+        console.log("Fetch response:", res.status, res.statusText);
 
-        // Important: skip first row if it's not headers (your CSV has data in row 1)
-        const gameText = await gameRes.text();
-        gameLogData = Papa.parse(gameText, {header: false, dynamicTyping: true, skipEmptyLines: true}).data;
-        
-        // Use the second row as headers (first real header row in your file)
-        const headers = gameLogData[0];
-        gameLogData = gameLogData.slice(1).map(row => {
-          let obj = {};
-          headers.forEach((h, i) => obj[h || `col${i}`] = row[i]);
-          return obj;
-        });
+        if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
 
-        perInningData = Papa.parse(await perRes.text(), {header: true, dynamicTyping: true, skipEmptyLines: true}).data;
+        const text = await res.text();
+        const rows = text.trim().split('\n').length;
 
-        document.getElementById("debug").innerHTML = `
-          ✅ Game logs: <span class="text-cyan-400">${gameLogData.length}</span> rows<br>
-          ✅ Per-inning: <span class="text-cyan-400">${perInningData.length}</span> rows<br>
-          First date: ${gameLogData[0]?.gameDate || gameLogData[0]?.col0 || '—'}
-        `;
-
-        statusEl.textContent = `✅ Loaded ${gameLogData.length} rows`;
-        buildTable();
+        status.innerHTML = `✅ SUCCESS! Loaded <span class="text-emerald-400">${rows}</span> rows`;
+        details.innerHTML = `<span class="text-emerald-400">CSV loaded perfectly. Table should appear now.</span>`;
       } catch (err) {
-        statusEl.innerHTML = `❌ Failed to load: ${err.message}`;
-        console.error(err);
+        status.innerHTML = `❌ FAILED TO LOAD CSV`;
+        details.innerHTML = `
+          <strong>Error:</strong> ${err.message}<br>
+          <strong>URL tried:</strong> ${url}<br><br>
+          <strong>What to do:</strong><br>
+          1. Try in Incognito mode<br>
+          2. Disable ad-blockers / extensions<br>
+          3. Try a different browser
+        `;
+        console.error("Full fetch error:", err);
       }
     }
 
-    function switchTab(tab) {
-      currentTab = tab;
-      document.getElementById("tab-batters").classList.toggle("tab-active", tab === 0);
-      document.getElementById("tab-pitchers").classList.toggle("tab-active", tab === 1);
-      buildTable();
-    }
-
-    function buildTable() {
-      if (table) table.destroy();
-
-      const columns = currentTab === 0 ? [
-        {title: "Date", field: "gameDate", width: 110},
-        {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 80},
-        {title: "AB", field: "atBats", width: 60, hozAlign: "center"},
-        {title: "H", field: "hits", width: 60, hozAlign: "center"},
-        {title: "HR", field: "homeRuns", width: 60, hozAlign: "center"},
-        {title: "RBI", field: "rbi", width: 60, hozAlign: "center"},
-        {title: "K", field: "strikeOuts", width: 60, hozAlign: "center"},
-        {title: "BB", field: "baseOnBalls", width: 60, hozAlign: "center"},
-        {title: "Summary", field: "gameLogSummary", minWidth: 300}
-      ] : [
-        {title: "Date", field: "gameDate", width: 110},
-        {title: "Player", field: "fullName", width: 220, headerFilter: "input"},
-        {title: "Team", field: "home_team_abbreviation", width: 80},
-        {title: "IP", field: "inningsPitched", width: 70, hozAlign: "center"},
-        {title: "ER", field: "earnedRuns", width: 60, hozAlign: "center"},
-        {title: "K", field: "strikeOutsPitching", width: 60, hozAlign: "center"},
-        {title: "BB", field: "baseOnBallsPitching", width: 60, hozAlign: "center"},
-        {title: "Decision", field: "note", width: 140},
-        {title: "Summary", field: "gameLogSummary", minWidth: 300}
-      ];
-
-      const filtered = gameLogData.filter(row => {
-        if (currentTab === 0) return row.atBats != null || row.atBats === 0;
-        return row.inningsPitched != null || row.inningsPitched === 0;
-      });
-
-      table = new Tabulator("#table-container", {
-        data: filtered,
-        columns: columns,
-        layout: "fitColumns",
-        pagination: "local",
-        paginationSize: 25,
-        initialSort: [{column: "gameDate", dir: "desc"}],
-        rowClick: function(e, row) { togglePerInningDropdown(row); }
-      });
-    }
-
-    function togglePerInningDropdown(row) {
-      const existing = row.getElement().nextElementSibling;
-      if (existing && existing.classList.contains('detail-row')) {
-        existing.remove();
-        return;
-      }
-
-      const gamePk = row.getData().gamePk;
-      const playerId = row.getData().playerId;
-
-      const details = perInningData.filter(p => 
-        String(p.gamePk) === String(gamePk) &&
-        (currentTab === 0 ? String(p.batterId) === String(playerId) : String(p.pitcherId) === String(playerId))
-      );
-
-      if (details.length === 0) {
-        alert("No per-inning data found for this player/game.");
-        return;
-      }
-
-      const html = `
-        <tr class="detail-row bg-zinc-800">
-          <td colspan="20" class="p-4">
-            <h4 class="font-semibold text-cyan-300 mb-3">Per-Inning / At-Bat Details</h4>
-            <table class="w-full text-sm">
-              <thead><tr class="bg-zinc-900"><th class="p-2 text-left">Inning</th><th class="p-2 text-left">Result</th><th class="p-2 text-left">Description</th><th class="p-2 text-center">Pitches</th></tr></thead>
-              <tbody>
-                ${details.map(d => `
-                  <tr class="border-t border-zinc-700">
-                    <td class="p-2">${d.inning}</td>
-                    <td class="p-2">${d.atBatResult}</td>
-                    <td class="p-2">${d.description || '-'}</td>
-                    <td class="p-2 text-center">${d.pitchesInAB}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </td>
-        </tr>
-      `;
-
-      const detailRow = document.createElement('tr');
-      detailRow.className = 'detail-row';
-      detailRow.innerHTML = html;
-      row.getElement().after(detailRow);
-    }
-
-    window.addEventListener('load', loadData);
+    // Auto-run on page load
+    window.onload = loadData;
   </script>
 </body>
 </html>
