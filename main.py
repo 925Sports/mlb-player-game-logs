@@ -21,6 +21,10 @@
         <h1 class="text-4xl font-bold mb-2">MLB 2026 Player Game Logs</h1>
         <div id="last-updated" class="text-sm text-zinc-400 mb-6"></div>
 
+        <!-- Global Search -->
+        <input id="global-search" type="text" placeholder="Search player..." 
+               class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-5 py-3 mb-6 text-lg focus:outline-none focus:border-blue-500">
+
         <!-- Splits Filters -->
         <div class="flex gap-6 mb-6 bg-zinc-900 p-5 rounded-xl">
             <div>
@@ -50,14 +54,17 @@
         <div id="table-container" class="bg-zinc-900 rounded-xl overflow-hidden shadow-2xl"></div>
     </div>
 
-    <!-- Per-Inning Popup Modal -->
-    <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 modal">
-        <div class="bg-zinc-900 rounded-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
-            <div class="p-6 border-b border-zinc-700 flex justify-between items-center">
-                <h2 id="modal-title" class="text-2xl font-semibold"></h2>
-                <button onclick="closeModal()" class="text-zinc-400 hover:text-white text-3xl leading-none">×</button>
+    <!-- Player Profile Modal -->
+    <div id="profile-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 modal overflow-auto">
+        <div class="bg-zinc-900 rounded-3xl w-full max-w-6xl mx-4 my-8 max-h-[92vh] flex flex-col">
+            <div class="px-8 py-6 border-b border-zinc-700 flex items-center justify-between">
+                <div id="profile-header" class="flex items-center gap-4"></div>
+                <button onclick="closeProfileModal()" class="text-4xl text-zinc-400 hover:text-white">×</button>
             </div>
-            <div class="p-6 overflow-auto max-h-[70vh]" id="modal-content"></div>
+            
+            <div class="flex-1 overflow-auto p-8" id="profile-content">
+                <!-- Populated by JS -->
+            </div>
         </div>
     </div>
 
@@ -66,59 +73,55 @@
         let perInningData = [];
         let currentTab = 0;
         let table = null;
+        let currentPlayerData = null;
 
         const GAME_LOG_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_season_game_logs.csv";
         const PER_INNING_URL = "https://raw.githubusercontent.com/925Sports/mlb-player-game-logs/main/mlb_2026_per_inning_logs.csv";
 
         async function loadData() {
-            try {
-                const [gameRes, inningRes] = await Promise.all([
-                    fetch(GAME_LOG_URL + '?t=' + Date.now()),
-                    fetch(PER_INNING_URL + '?t=' + Date.now())
-                ]);
+            const [gameRes, inningRes] = await Promise.all([
+                fetch(GAME_LOG_URL + '?t=' + Date.now()),
+                fetch(PER_INNING_URL + '?t=' + Date.now())
+            ]);
 
-                const gameText = await gameRes.text();
-                const inningText = await inningRes.text();
+            const gameText = await gameRes.text();
+            const inningText = await inningRes.text();
 
-                // Parse game logs (robust parser)
-                const gameRows = gameText.trim().split('\n');
-                const gameHeaders = gameRows[0].split(',').map(h => h.replace(/"/g, '').trim());
-                gameLogData = gameRows.slice(1).map(row => {
-                    const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                    const obj = {};
-                    gameHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
-                    return obj;
-                });
+            // Parse game logs
+            const gameRows = gameText.trim().split('\n');
+            const gameHeaders = gameRows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            gameLogData = gameRows.slice(1).map(row => {
+                const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                const obj = {};
+                gameHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].trim().replace(/"/g, '') : '');
+                return obj;
+            });
 
-                // Parse per-inning data
-                const inningRows = inningText.trim().split('\n');
-                const inningHeaders = inningRows[0].split(',').map(h => h.replace(/"/g, '').trim());
-                perInningData = inningRows.slice(1).map(row => {
-                    const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                    const obj = {};
-                    inningHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].replace(/"/g, '').trim() : '');
-                    return obj;
-                });
+            // Parse per-inning
+            const inningRows = inningText.trim().split('\n');
+            const inningHeaders = inningRows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            perInningData = inningRows.slice(1).map(row => {
+                const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                const obj = {};
+                inningHeaders.forEach((h, i) => obj[h] = values[i] ? values[i].trim().replace(/"/g, '') : '');
+                return obj;
+            });
 
-                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
-                buildTable();
-            } catch (err) {
-                console.error(err);
-            }
+            document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+            buildTable();
+
+            // Global search
+            document.getElementById('global-search').addEventListener('input', () => buildTable());
         }
 
-        function getOpponentAndResult(row) {
+        function getTeamAndResult(row) {
             const homeAbbr = row.home_team_abbreviation || '';
             const awayAbbr = row.away_team_abbreviation || '';
-            const isHome = row.teamAbbrev === homeAbbr || !row.teamAbbrev;
+            const isHome = homeAbbr === row.home_team_abbreviation && row.home_team_abbreviation;
+            const team = isHome ? homeAbbr : awayAbbr;
             const opponent = isHome ? awayAbbr : homeAbbr;
             const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
-            return { 
-                opponent: opponent ? `vs ${opponent}` : '', 
-                result: result || '',
-                isHome: isHome ? "Home" : "Away",
-                dayNight: (row.dayNight || "").toLowerCase()
-            };
+            return { team, opponent: `vs ${opponent}`, result, isHome: isHome ? "Home" : "Away", dayNight: (row.dayNight || "").toLowerCase() };
         }
 
         function buildTable() {
@@ -126,11 +129,12 @@
             container.innerHTML = '';
 
             const isBatters = currentTab === 0;
+            const searchTerm = document.getElementById('global-search').value.toLowerCase().trim();
 
             const columns = [
                 { title: "Date", field: "gameDate", width: 110, headerFilter: "input", hozAlign: "center" },
                 { title: "Player", field: "fullName", width: 220, headerFilter: "input" },
-                { title: "Team", field: "teamAbbrev", width: 90, headerFilter: "input", hozAlign: "center" },
+                { title: "Team", field: "team", width: 90, headerFilter: "input", hozAlign: "center" },
                 { title: "Opponent", field: "opponent", width: 120, headerFilter: "input", hozAlign: "center" },
                 { title: "Result", field: "result", width: 110, hozAlign: "center" },
                 { title: "Pos", field: "primaryPosition_name", width: 110, headerFilter: "input", hozAlign: "center" },
@@ -161,16 +165,19 @@
                 );
             }
 
-            const filteredData = gameLogData
-                .filter(row => {
-                    if (isBatters) return parseFloat(row.atBats || 0) > 0;
-                    return parseFloat(row.inningsPitched || 0) > 0 || row.note;
-                })
-                .map(row => {
-                    const extra = getOpponentAndResult(row);
-                    row.teamAbbrev = row.teamAbbrev || (extra.isHome === "Home" ? row.home_team_abbreviation : row.away_team_abbreviation);
-                    return { ...row, opponent: extra.opponent, result: extra.result, isHome: extra.isHome, dayNight: extra.dayNight };
-                });
+            let filteredData = gameLogData.filter(row => {
+                if (isBatters) return parseFloat(row.atBats || 0) > 0;
+                return parseFloat(row.inningsPitched || 0) > 0 || row.note;
+            }).map(row => {
+                const extra = getTeamAndResult(row);
+                return { ...row, team: extra.team, opponent: extra.opponent, result: extra.result, isHome: extra.isHome, dayNight: extra.dayNight };
+            });
+
+            if (searchTerm) {
+                filteredData = filteredData.filter(row => 
+                    row.fullName.toLowerCase().includes(searchTerm)
+                );
+            }
 
             table = new Tabulator("#table-container", {
                 data: filteredData,
@@ -180,9 +187,7 @@
                 paginationSize: 50,
                 paginationSizeSelector: [25, 50, 100, 250],
                 initialSort: [{ column: "gameDate", dir: "desc" }],
-                rowClick: function(e, row) {
-                    showPerInningModal(row.getData());
-                }
+                rowClick: (e, row) => showPlayerProfile(row.getData())
             });
         }
 
@@ -198,54 +203,81 @@
             });
         }
 
-        function showPerInningModal(rowData) {
-            const modal = document.getElementById('modal');
-            const title = document.getElementById('modal-title');
-            const content = document.getElementById('modal-content');
+        function showPlayerProfile(rowData) {
+            currentPlayerData = rowData;
+            const modal = document.getElementById('profile-modal');
+            const header = document.getElementById('profile-header');
+            const content = document.getElementById('profile-content');
 
-            title.textContent = `${rowData.fullName} — ${rowData.gameDate} ${rowData.opponent || ''}`;
+            header.innerHTML = `
+                <div class="text-3xl font-bold">${rowData.fullName}</div>
+                <div class="text-xl text-zinc-400">${rowData.primaryPosition_name} • ${rowData.team}</div>
+            `;
 
+            // Calculate season stats
+            const playerRows = gameLogData.filter(r => r.playerId === rowData.playerId);
+            const isBatter = parseFloat(rowData.atBats || 0) > 0;
+
+            let statsHTML = '';
+            if (isBatter) {
+                const totalAB = playerRows.reduce((a, r) => a + parseFloat(r.atBats || 0), 0);
+                const totalH = playerRows.reduce((a, r) => a + parseFloat(r.hits || 0), 0);
+                statsHTML = `AVG: ${(totalH / totalAB || 0).toFixed(3)} • HR: ${playerRows.reduce((a, r) => a + parseFloat(r.homeRuns || 0), 0)}`;
+            } else {
+                const totalIP = playerRows.reduce((a, r) => a + parseFloat(r.inningsPitched || 0), 0);
+                statsHTML = `ERA: ${((playerRows.reduce((a, r) => a + parseFloat(r.earnedRuns || 0), 0) / totalIP) * 9 || 0).toFixed(2)} • K: ${playerRows.reduce((a, r) => a + parseFloat(r.strikeOutsPitching || 0), 0)}`;
+            }
+
+            content.innerHTML = `
+                <div class="grid grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-4">Player Bio</h3>
+                        <div class="space-y-3 text-lg">
+                            <p><span class="text-zinc-400">Age:</span> ${rowData.currentAge || 'N/A'}</p>
+                            <p><span class="text-zinc-400">Height:</span> ${rowData.height || 'N/A'}</p>
+                            <p><span class="text-zinc-400">Weight:</span> ${rowData.weight || 'N/A'}</p>
+                            <p><span class="text-zinc-400">Born:</span> ${rowData.birthDate || 'N/A'}</p>
+                            <p><span class="text-zinc-400">Bats:</span> ${rowData.batSide_description || 'N/A'}</p>
+                            <p><span class="text-zinc-400">Throws:</span> ${rowData.pitchHand_description || 'N/A'}</p>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold mb-4">Season Averages</h3>
+                        <div class="text-2xl">${statsHTML}</div>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold mt-8 mb-4">Splits</h3>
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-zinc-800 p-4 rounded-2xl">Home: ${playerRows.filter(r => getTeamAndResult(r).isHome === "Home").length} games</div>
+                    <div class="bg-zinc-800 p-4 rounded-2xl">Away: ${playerRows.filter(r => getTeamAndResult(r).isHome === "Away").length} games</div>
+                </div>
+
+                <h3 class="text-xl font-semibold mt-8 mb-4">Per-Inning Details</h3>
+                <div id="per-inning-in-profile" class="max-h-96 overflow-auto"></div>
+            `;
+
+            // Per-inning inside profile
+            const detailsContainer = document.getElementById('per-inning-in-profile');
             const details = perInningData.filter(p => 
-                String(p.gamePk || p.game_pk || '') === String(rowData.gamePk) && 
-                (currentTab === 0 
-                    ? String(p.batterId || p.batter_id || p.batterID || '') === String(rowData.playerId)
-                    : String(p.pitcherId || p.pitcher_id || p.pitcherID || '') === String(rowData.playerId))
+                String(p.gamePk) === String(rowData.gamePk) && 
+                (isBatter 
+                    ? String(p.batterId || p.playerId) === String(rowData.playerId)
+                    : String(p.pitcherId || p.playerId) === String(rowData.playerId))
             );
 
-            let html = `<table class="w-full text-sm border-collapse"><thead class="bg-zinc-800 sticky top-0"><tr>
-                <th class="p-3 text-left">Inning</th>
-                <th class="p-3 text-left">Result</th>
-                <th class="p-3 text-left">Description</th>
-                <th class="p-3 text-left">Pitches</th>
-                <th class="p-3 text-left">RBI</th>
-                <th class="p-3 text-left">Runs</th>
-            </tr></thead><tbody>`;
-
-            if (details.length === 0) {
-                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">
-                    No per-inning details found.<br>
-                    <span class="text-xs">gamePk: ${rowData.gamePk} | playerId: ${rowData.playerId}</span>
-                </td></tr>`;
-            } else {
-                details.forEach(d => {
-                    html += `<tr class="border-t border-zinc-700 hover:bg-zinc-800">
-                        <td class="p-3">${d.inning || ''}</td>
-                        <td class="p-3">${d.atBatResult || d.result || ''}</td>
-                        <td class="p-3">${d.description || ''}</td>
-                        <td class="p-3">${d.pitchesInAB || d.pitches || ''}</td>
-                        <td class="p-3">${d.rbi || '0'}</td>
-                        <td class="p-3">${d.runs || '0'}</td>
-                    </tr>`;
-                });
-            }
+            let html = `<table class="w-full text-sm"><thead class="bg-zinc-800"><tr><th class="p-3">Inning</th><th class="p-3">Result</th><th class="p-3">Description</th><th class="p-3">Pitches</th></tr></thead><tbody>`;
+            details.forEach(d => {
+                html += `<tr class="border-t"><td class="p-3">${d.inning}</td><td class="p-3">${d.atBatResult || d.event}</td><td class="p-3">${d.description}</td><td class="p-3">${d.pitchesInAB || ''}</td></tr>`;
+            });
             html += `</tbody></table>`;
+            detailsContainer.innerHTML = html || '<p class="text-zinc-400">No per-inning data available for this game.</p>';
 
-            content.innerHTML = html;
             modal.classList.remove('hidden');
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
+        function closeProfileModal() {
+            document.getElementById('profile-modal').classList.add('hidden');
         }
 
         function switchTab(tab) {
