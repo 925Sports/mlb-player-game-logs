@@ -80,7 +80,7 @@
                 const gameText = await gameRes.text();
                 const inningText = await inningRes.text();
 
-                // Parse game logs
+                // Parse game logs (robust parser)
                 const gameRows = gameText.trim().split('\n');
                 const gameHeaders = gameRows[0].split(',').map(h => h.replace(/"/g, '').trim());
                 gameLogData = gameRows.slice(1).map(row => {
@@ -108,12 +108,14 @@
         }
 
         function getOpponentAndResult(row) {
-            const isHome = row.home_team_abbreviation === row.teamAbbrev;
-            const opponent = isHome ? row.away_team_abbreviation : row.home_team_abbreviation;
+            const homeAbbr = row.home_team_abbreviation || '';
+            const awayAbbr = row.away_team_abbreviation || '';
+            const isHome = row.teamAbbrev === homeAbbr || !row.teamAbbrev;
+            const opponent = isHome ? awayAbbr : homeAbbr;
             const result = `${row.home_isWinner === "True" ? "W" : "L"} ${row.home_score}-${row.away_score}`;
             return { 
-                opponent: `vs ${opponent}`, 
-                result: result,
+                opponent: opponent ? `vs ${opponent}` : '', 
+                result: result || '',
                 isHome: isHome ? "Home" : "Away",
                 dayNight: (row.dayNight || "").toLowerCase()
             };
@@ -166,6 +168,7 @@
                 })
                 .map(row => {
                     const extra = getOpponentAndResult(row);
+                    row.teamAbbrev = row.teamAbbrev || (extra.isHome === "Home" ? row.home_team_abbreviation : row.away_team_abbreviation);
                     return { ...row, opponent: extra.opponent, result: extra.result, isHome: extra.isHome, dayNight: extra.dayNight };
                 });
 
@@ -202,13 +205,11 @@
 
             title.textContent = `${rowData.fullName} — ${rowData.gameDate} ${rowData.opponent || ''}`;
 
-            // Try multiple possible ID field names
             const details = perInningData.filter(p => 
-                String(p.gamePk || p.game_pk) === String(rowData.gamePk) && 
+                String(p.gamePk || p.game_pk || '') === String(rowData.gamePk) && 
                 (currentTab === 0 
-                    ? (String(p.batterId || p.batter_id || p.batterID) === String(rowData.playerId))
-                    : (String(p.pitcherId || p.pitcher_id || p.pitcherID) === String(rowData.playerId))
-                )
+                    ? String(p.batterId || p.batter_id || p.batterID || '') === String(rowData.playerId)
+                    : String(p.pitcherId || p.pitcher_id || p.pitcherID || '') === String(rowData.playerId))
             );
 
             let html = `<table class="w-full text-sm border-collapse"><thead class="bg-zinc-800 sticky top-0"><tr>
@@ -221,7 +222,10 @@
             </tr></thead><tbody>`;
 
             if (details.length === 0) {
-                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">No per-inning details found.<br>gamePk: ${rowData.gamePk} | playerId: ${rowData.playerId}</td></tr>`;
+                html += `<tr><td colspan="6" class="p-10 text-center text-zinc-400">
+                    No per-inning details found.<br>
+                    <span class="text-xs">gamePk: ${rowData.gamePk} | playerId: ${rowData.playerId}</span>
+                </td></tr>`;
             } else {
                 details.forEach(d => {
                     html += `<tr class="border-t border-zinc-700 hover:bg-zinc-800">
